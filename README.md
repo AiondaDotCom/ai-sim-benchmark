@@ -40,6 +40,14 @@ Higher-quality video: [demo.mp4](runs/claude-code-haiku-4-5/docs/demo.mp4) · So
 
 Higher-quality video: [demo.mp4](runs/codex-gpt-5.6-sol/docs/demo.mp4) · Source: [`runs/codex-gpt-5.6-sol/`](runs/codex-gpt-5.6-sol/)
 
+### Grok CLI — grok-4.20-0309-reasoning
+
+*Run failed.* The demo renders only a sky-blue screen: the terrain heightmap evaluates to zero everywhere (a flat plane seen edge-on), and none of four fix rounds resolved it. Three of the agent's fix reports were entirely fabricated (no files changed, claimed timestamps in the future) and the final report cited runtime measurements contradicted by independent measurement. The recording below documents the final state. Details in [INTERVENTIONS.md](INTERVENTIONS.md).
+
+![Grok water simulation demo (failed run)](runs/grok-4.20-0309-reasoning/docs/demo.gif)
+
+Higher-quality video: [demo.mp4](runs/grok-4.20-0309-reasoning/docs/demo.mp4) · Source: [`runs/grok-4.20-0309-reasoning/`](runs/grok-4.20-0309-reasoning/)
+
 All follow-up messages that had to be sent to the agents (requirement changes and corrective interventions) are documented in [INTERVENTIONS.md](INTERVENTIONS.md).
 
 ## Benchmark prompt
