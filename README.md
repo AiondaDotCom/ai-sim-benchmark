@@ -24,7 +24,7 @@ Higher-quality video: [demo.mp4](runs/claude-code-fable-5/docs/demo.mp4) · Sour
 
 ### Claude Code — Haiku 4.5
 
-*Run in progress — video coming soon.*
+*Run failed.* After 4 corrective interventions the demo still did not show a mountain landscape with downhill water flow (flat terrain noise, fully flooded grid, broken camera framing), while tests stayed green and builds succeeded throughout. Details in [INTERVENTIONS.md](INTERVENTIONS.md).
 
 All follow-up messages that had to be sent to the agents (requirement changes and corrective interventions) are documented in [INTERVENTIONS.md](INTERVENTIONS.md).
 
