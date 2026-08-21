@@ -35,9 +35,10 @@ Notes: requirement A3 (sky background) was implemented on request after completi
 
 | # | Time | Intervention | Outcome |
 | --- | --- | --- | --- |
-| B1 | ~16:24 | Recorded video showed the orbit camera far too close: the whole 20 s clip framed a single smooth hillside, water barely visible. Told to reframe the orbit so the entire terrain stays in view (aerial view) and to verify with a screenshot. | In progress. |
+| B1 | ~16:24 | Recorded video showed the orbit camera far too close: the whole 20 s clip framed a single smooth hillside, water barely visible. Told to reframe the orbit so the entire terrain stays in view (aerial view) and to verify with a screenshot. | Camera reframed (agent went idle without reporting). The aerial view then revealed a physics defect the close-up had hidden — see B2. |
+| B2 | ~16:35 | Independent verification of the rebuilt demo (screenshots at ~5 s and ~30 s of simulation): the simulation floods the ENTIRE terrain, including a physically impossible convex water dome bulging on the summit; camera also overcorrected (terrain only ~25-30 % of frame). Sent a debugging protocol: log wet-cell percentage and summit water depth over time, fix spring rate/drainage balance and equilibrium step, reframe camera to ~60-80 % of frame, save and inspect verify.png before reporting. | In progress. |
 
-Total corrective interventions so far: **1**.
+Total corrective interventions so far: **2**. Notable: the agent's 12/12 passing tests included mass conservation and downhill-flow tests, yet the integrated result still piled water on the summit — unit-level correctness did not compose into system-level correctness at default parameters.
 
 ### Claude Code — Haiku 4.5 (`runs/claude-code-haiku-4-5/`)
 
