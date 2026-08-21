@@ -5,6 +5,30 @@ import type { WaterSimulation } from '../simulation/water';
 
 const FOG_COLOR = new THREE.Color(0xd4edf3);
 
+function createSkyGradientTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 16;
+  canvas.height = 512;
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error('Unable to create the procedural sky texture.');
+
+  const gradient = context.createLinearGradient(0, 0, 0, canvas.height);
+  gradient.addColorStop(0, '#62b6e3');
+  gradient.addColorStop(0.16, '#b7dfec');
+  gradient.addColorStop(0.24, '#d4edf3');
+  gradient.addColorStop(0.42, '#d4edf3');
+  gradient.addColorStop(1, '#b9ddcf');
+  context.fillStyle = gradient;
+  context.fillRect(0, 0, canvas.width, canvas.height);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.minFilter = THREE.LinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+  texture.generateMipmaps = false;
+  return texture;
+}
+
 function makeGridIndices(width: number, height: number): Uint32Array {
   const indices = new Uint32Array((width - 1) * (height - 1) * 6);
   let cursor = 0;
@@ -268,7 +292,7 @@ export class WorldRenderer {
     this.terrain = terrain;
     this.rainIntensity = rainIntensity;
     this.initialAngle = mulberry32(hashString(`${seed}:camera`))() * Math.PI * 2;
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -278,7 +302,8 @@ export class WorldRenderer {
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     container.appendChild(this.renderer.domElement);
 
-    this.renderer.setClearColor(0x87ceeb, 0);
+    this.renderer.setClearColor(0x87ceeb, 1);
+    this.scene.background = createSkyGradientTexture();
     this.scene.fog = new THREE.Fog(FOG_COLOR, 155, 320);
 
     const ground = new THREE.Mesh(

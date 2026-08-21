@@ -42,7 +42,7 @@ Example: `http://localhost:5173/?seed=glacier-pass&rain=1.6&speed=3`
 
 - `src/simulation/terrain.ts` builds a repeatable height field from seeded fractal value noise, ridged noise, broad Gaussian peaks, edge falloff, and small basin cuts. It also locates separated high-altitude peaks for spring placement.
 - `src/simulation/water.ts` is a renderer-independent conservative surface-water solver. It tracks water depth per grid cell, computes four-neighbor hydraulic-head gradients, caps combined outgoing flux by available water, and commits transfers simultaneously. Rain is height-weighted and springs inject water near selected summits.
-- `src/rendering/WorldRenderer.ts` turns the height and water grids into Three.js meshes. Terrain uses elevation/slope coloring; a transparent animated shader presents moving shallow water and deeper lakes. Procedural trees, visible rain, lighting, fog, and a gradient sky complete the scene. The camera orbits without input.
+- `src/rendering/WorldRenderer.ts` turns the height and water grids into Three.js meshes. Terrain uses elevation/slope coloring; a transparent animated shader presents moving shallow water and deeper lakes. Procedural trees, visible rain, lighting, fog, and an in-canvas gradient sky texture complete the scene. The camera orbits without input.
 - `src/app.ts` owns the fixed-substep simulation loop and connects model state to rendering. `src/main.ts` is the minimal browser bootstrap.
 
 ### Simulation model

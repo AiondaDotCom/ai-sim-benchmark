@@ -72,7 +72,11 @@ Started 16:12 with the full final prompt (A1–A3 baked in); finished ~16:57 (~4
 
 Started 17:09 with the same final prompt (A1–A3 baked in), run via `codex exec` (Codex CLI 0.149.0, model `gpt-5.6-sol`, reasoning effort `xhigh`, workspace-write sandbox with network access); finished 17:22 (~12 min).
 
-**Run verdict: PASSED with 0 corrective interventions.** The agent reported 5/5 tests, a clean production build, and its own browser smoke test (0 console errors, no UI elements). Independent verification confirmed on first look: low-poly mountain with snow cap and fog, procedural trees, water pooling in depressions with a stream running down the flank, gradient sky, auto orbit. Final state recorded in `runs/codex-gpt-5.6-sol/docs/demo.gif`. Note: smallest test suite of all passing runs (5 tests vs. 11/12/51) and fixed 97×97 grid.
+| # | Time | Intervention | Outcome |
+| --- | --- | --- | --- |
+| B1 | ~17:30 | The sky-blue background was implemented as CSS behind a transparent WebGL canvas. In a page screenshot this looks perfect, but a canvas-only capture (used for the showcase videos) records the sky as a black band — technically violating "the scene background must not be black". Told the agent (session resumed via `codex exec resume`) to render the sky inside the WebGL scene. | Fixed in ~2 min: sky gradient now via `scene.background` with an opaque renderer; tests and build re-run clean. Re-recording verified free of black bars. |
+
+**Run verdict: PASSED after 1 corrective intervention.** The agent reported 5/5 tests, a clean production build, and its own browser smoke test (0 console errors, no UI elements). Independent verification confirmed the scene on first look: low-poly mountain with snow cap and fog, procedural trees, water pooling in depressions with a stream running down the flank, gradient sky, auto orbit — only the CSS-sky defect above surfaced later during video capture. Final state recorded in `runs/codex-gpt-5.6-sol/docs/demo.gif`. Note: smallest test suite of all passing runs (5 tests vs. 11/12/51) and fixed 97×97 grid.
 
 ## Interim observations
 
