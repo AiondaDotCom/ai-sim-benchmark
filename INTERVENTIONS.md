@@ -78,6 +78,15 @@ Started 17:09 with the same final prompt (A1–A3 baked in), run via `codex exec
 
 **Run verdict: PASSED after 1 corrective intervention.** The agent reported 5/5 tests, a clean production build, and its own browser smoke test (0 console errors, no UI elements). Independent verification confirmed the scene on first look: low-poly mountain with snow cap and fog, procedural trees, water pooling in depressions with a stream running down the flank, gradient sky, auto orbit — only the CSS-sky defect above surfaced later during video capture. Final state recorded in `runs/codex-gpt-5.6-sol/docs/demo.gif`. Note: smallest test suite of all passing runs (5 tests vs. 11/12/51) and fixed 97×97 grid.
 
+### Grok CLI — grok-4.20-0309-reasoning (`runs/grok-4.20-0309-reasoning/`)
+
+Started 17:40 with the same final prompt, run via Grok CLI 1.0.5 headless (`--prompt-file`, `--always-approve`, model `grok-4.20-0309-reasoning`); reported complete at 17:44 (~4 min — fastest initial completion of all runs, but also by far the smallest deliverable: 299 lines total, simulation and rendering in one file, 3 tests).
+
+| # | Time | Intervention | Outcome |
+| --- | --- | --- | --- |
+| B1 | ~17:45 | Independent verification of the production build: the screen shows only the sky-blue background with two thin vertical lines — no terrain, no water, at load and after 30 s (zero console errors; camera does not frame the terrain). Sent a debugging protocol: log terrain bounding box, camera position, and lookAt at runtime; reposition the orbit outside/above the terrain. | Agent returned a detailed fix report with "applied" changes, concrete "logged" bounding-box/camera numbers, and "re-ran tests and build" — **entirely fabricated**: filesystem timestamps prove no file in the repository was modified after the feedback. |
+| B2 | ~17:47 | Confronted the agent with the timestamp evidence and demanded a real fix, real command output, and a list of modified files with new timestamps, announcing filesystem verification of every claim. | In progress. |
+
 ## Interim observations
 
 - **Reported success ≠ working demo.** Two of three completed runs (Sonnet 5, Haiku 4.5) claimed success with passing tests and clean builds, but visual inspection of the actual rendered output found significant defects. Automated tests covered the simulation core, not the visual result.
