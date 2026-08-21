@@ -85,6 +85,15 @@ For every agent run:
 7. Record elapsed time, model, agent version, token usage, cost, interventions, test results, and final rubric score.
 8. Evaluate at least three fixed seeds shared by all submissions.
 
+## Agent environment
+
+All recorded runs in `runs/` were executed with Claude Code sub-agents that, in addition to the usual filesystem/terminal tools, had access to the following MCP servers:
+
+- **chrome-devtools (chrome-mcp)** — drives a real Chrome instance: open pages, evaluate JavaScript, take screenshots. Used by the agents to visually verify their running demo, and by the orchestrator to independently verify results and record the demo videos (canvas capture via MediaRecorder).
+- **peekaboo** — macOS screen capture and GUI automation, available as an alternative way to take screenshots of the running application.
+
+Visual self-verification via these tools proved decisive: runs whose agents actually looked at their rendered output before reporting (e.g. Fable 5) shipped working demos, while reports based only on passing tests and successful builds could still hide a visually broken scene (see [INTERVENTIONS.md](INTERVENTIONS.md)).
+
 ## Suggested result record
 
 ```text

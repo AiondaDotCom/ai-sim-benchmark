@@ -9,6 +9,8 @@ Two kinds of follow-up messages are distinguished:
 
 All times are local (Europe/Berlin), 2026-08-21. The orchestrating session ("Claude Code with Fable 5, high effort") performed the inspections: it recorded videos of each finished demo, extracted frames, and compared the result against the requirements before accepting an agent's completion report.
 
+Tooling note: both the agents and the orchestrator had access to the **chrome-devtools (chrome-mcp)** and **peekaboo** MCP servers. All visual verification (screenshots of the running demos) and the video recordings (canvas capture via MediaRecorder in a Chrome instance driven over chrome-devtools) were done with these tools.
+
 ## Requirement changes (A) — applied to all runs
 
 | # | Time | Change |
