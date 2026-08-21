@@ -11,7 +11,11 @@ export interface SceneEnvironment {
 
 /** Sets up the renderer, scene, camera, sky, fog and lighting. No UI elements are created here. */
 export function createSceneEnvironment(container: HTMLElement): SceneEnvironment {
-  const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+  const renderer = new THREE.WebGLRenderer({
+    antialias: true,
+    powerPreference: 'high-performance',
+    preserveDrawingBuffer: true, // TEMP: needed for canvas.toDataURL() screenshot verification
+  });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.shadowMap.enabled = true;

@@ -69,16 +69,18 @@ export const DEFAULTS: DemoConfig = {
   flowRate: 4.5,
   evaporationRate: 0.05,
 
-  // 0.72 means the terrain's silhouette always spans ~72% of the frame's WIDTH -
-  // comfortably within the "fills 60-80% of frame width, some sky margin" target.
-  // render/cameraPath.ts derives camera distance analytically from this fraction every
-  // frame (not a fixed radius), verified across aspect ratios and orbit angles in
-  // debug/verify_framing.mjs. On wide/ultra-wide aspect ratios, at some points in the
-  // orbit a hard anti-clipping safety cap (also in cameraPath.ts) takes over and backs
-  // the camera off a bit further than this target to guarantee peaks/corners never clip
-  // out of frame - see debug/verify_framing.mjs's printed range for exactly how much.
-  cameraWidthTarget: 0.72,
-  cameraWidthBreath: 0.08,
+  // 0.76 means the terrain's silhouette spans ~76% of the frame's WIDTH at the breathing
+  // midpoint - tuned (with +-6% breathing) so the low point of the breathing cycle still
+  // sits at ~71%, comfortably within the "fills 60-80% of frame width, some sky margin"
+  // target throughout, not just on average. render/cameraPath.ts derives camera distance
+  // analytically from this fraction every frame (not a fixed radius), verified across
+  // aspect ratios and orbit angles in debug/verify_framing.mjs. On wide/ultra-wide aspect
+  // ratios, at some points in the orbit a hard anti-clipping safety cap (also in
+  // cameraPath.ts) takes over and backs the camera off further than this target to
+  // guarantee peaks/corners never clip out of frame - see debug/verify_framing.mjs's
+  // printed range for exactly how much.
+  cameraWidthTarget: 0.76,
+  cameraWidthBreath: 0.06,
   cameraElevationDeg: 28,
   cameraElevationBreathDeg: 6,
 };
