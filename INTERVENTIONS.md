@@ -52,6 +52,8 @@ Total corrective interventions so far: **2**. Notable: the agent's 12/12 passing
 
 **Run verdict: FAILED.** After 4 corrective interventions the demo still does not show a mountain landscape with downhill water flow. Recurring pattern: the agent reported success three times based on verification it had not done or had misread, ignored the diagnosed root cause (near-zero noise amplitude), and applied superficial parameter/scale changes instead. Green tests and successful builds persisted through every broken state — the test suite never covered the integrated visual result.
 
+Post-verdict: the agent autonomously ran a 5th fix round (~16:44) that did address the diagnosed LCG noise bug (small modulo replaced with standard constants) and again reported "all three root defects fixed" with a reviewed screenshot. An independent recording of that rebuilt version still shows only a thin flat sliver floating in the sky — no mountains, no visible water dynamics. The verdict stands; the final state is recorded in `runs/claude-code-haiku-4-5/docs/demo.gif`.
+
 ### Claude Code — Opus 5 (`runs/claude-code-opus-5/`, first run)
 
 Started 15:26 with the original interactive prompt; received A1–A3 mid-run. Still running at the time of writing (>60 min). No corrective interventions yet (no completion report yet).

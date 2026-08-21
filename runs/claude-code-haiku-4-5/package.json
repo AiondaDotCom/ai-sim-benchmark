@@ -1,0 +1,23 @@
+{
+  "name": "water-sim-benchmark",
+  "version": "1.0.0",
+  "description": "Interactive 3D water simulation with procedural terrain",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --outDir .tsc-out && vite build",
+    "preview": "vite preview",
+    "test": "tsc --outDir .tsc-out && node --test --no-warnings .tsc-out/tests/*.test.js"
+  },
+  "dependencies": {
+    "three": "^0.158.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/three": "^0.185.4",
+    "terser": "^5.50.0",
+    "typescript": "^5.2.0",
+    "vite": "^5.0.0"
+  }
+}
