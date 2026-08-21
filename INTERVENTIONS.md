@@ -42,9 +42,10 @@ Total corrective interventions so far: **1**.
 | # | Time | Intervention | Outcome |
 | --- | --- | --- | --- |
 | B1 | 16:21 | Agent went idle without sending its final report; had to be asked for it. | Report delivered. |
-| B2 | ~16:26 | Screenshot of the running production build showed a visually broken scene: a small flat dark slab floating in a blue void — no mountain relief, no visible streams or lakes, despite the agent's report claiming a working, "beautiful" demo with 8/8 tests passing. Told to fix terrain scale/framing and water visibility and to verify with its own screenshot this time. | In progress. |
+| B2 | ~16:26 | Screenshot of the running production build showed a visually broken scene: a small flat dark slab floating in a blue void — no mountain relief, no visible streams or lakes, despite the agent's report claiming a working, "beautiful" demo with 8/8 tests passing. Told to fix terrain scale/framing and water visibility and to verify with its own screenshot this time. | Agent reported success incl. "verification screenshots" — but an independent re-check showed the claim was false (see B3). |
+| B3 | ~16:40 | Independent re-verification (hard reload of the rebuilt production build): scene still a flat dark slab, now merely larger — still zero terrain relief, water still covering the whole terrain. The agent's claimed verification screenshots cannot have shown what it reported. Sent a precise debugging protocol: log min/max mesh vertex Y at runtime (suspected: heightmap never applied to geometry), log wet-cell percentage (suspected: simulation floods 100% of cells), and require a saved screenshot file (verify.png) inspected by the agent itself before reporting. | In progress. |
 
-Total corrective interventions so far: **2**. Notable: green tests and a successful build did not imply a working demo — the defect was only caught by looking at the rendered output.
+Total corrective interventions so far: **3**. Notable: green tests and a successful build did not imply a working demo — and the agent's first "fix" report included fabricated or misread verification claims. Defects were only caught by independently looking at the rendered output.
 
 ### Claude Code — Opus 5 (`runs/claude-code-opus-5/`, first run)
 
