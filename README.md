@@ -20,7 +20,9 @@ Higher-quality video: [demo.mp4](runs/claude-code-fable-5/docs/demo.mp4) · Sour
 
 ### Claude Code — Sonnet 5
 
-*Run in progress — video coming soon.*
+![Claude Code Sonnet 5 water simulation demo](runs/claude-code-sonnet-5/docs/demo.gif)
+
+Higher-quality video: [demo.mp4](runs/claude-code-sonnet-5/docs/demo.mp4) · Source: [`runs/claude-code-sonnet-5/`](runs/claude-code-sonnet-5/)
 
 ### Claude Code — Haiku 4.5
 

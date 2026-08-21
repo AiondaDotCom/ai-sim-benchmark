@@ -1,0 +1,33 @@
+/*
+ * Fullscreen, chrome-free canvas host. The sky-blue background here matters:
+ * it is what's visible for the brief moment before the WebGL canvas paints
+ * its first frame, so there must be no dark flash on load.
+ */
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  background: #87ceeb;
+  overflow: hidden;
+}
+
+#app {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  background: #87ceeb;
+}
+
+#app canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
