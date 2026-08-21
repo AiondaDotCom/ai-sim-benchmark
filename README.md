@@ -26,6 +26,8 @@ Higher-quality video: [demo.mp4](runs/claude-code-fable-5/docs/demo.mp4) · Sour
 
 *Run in progress — video coming soon.*
 
+All follow-up messages that had to be sent to the agents (requirement changes and corrective interventions) are documented in [INTERVENTIONS.md](INTERVENTIONS.md).
+
 ## Benchmark prompt
 
 Copy the following prompt into the coding agent being evaluated:
