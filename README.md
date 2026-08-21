@@ -16,7 +16,9 @@ Higher-quality video: [demo.mp4](runs/claude-code-fable-5/docs/demo.mp4) · Sour
 
 ### Claude Code — Opus 5
 
-*Run in progress — video coming soon.*
+![Claude Code Opus 5 water simulation demo](runs/claude-code-opus-5-v2/docs/demo.gif)
+
+Higher-quality video: [demo.mp4](runs/claude-code-opus-5-v2/docs/demo.mp4) · Source: [`runs/claude-code-opus-5-v2/`](runs/claude-code-opus-5-v2/)
 
 ### Claude Code — Sonnet 5
 

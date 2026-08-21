@@ -60,7 +60,13 @@ Started 15:26 with the original interactive prompt; received A1–A3 mid-run. St
 
 ### Claude Code — Opus 5 v2 (`runs/claude-code-opus-5-v2/`)
 
-Started 16:12 with the full final prompt (A1–A3 baked in). Still running at the time of writing. No corrective interventions yet.
+Started 16:12 with the full final prompt (A1–A3 baked in); finished ~16:57 (~45 min).
+
+| # | Time | Intervention | Outcome |
+| --- | --- | --- | --- |
+| B1 | 17:02 | Agent went idle without sending its final report; had to be asked for it. | Extremely thorough report delivered (51/51 tests, 6 self-found-and-fixed bugs documented, own headless-Chrome verification of both dev and production builds before finishing). |
+
+**Run verdict: PASSED with 0 corrective interventions** (only a report reminder). Independent verification confirmed the report on first look: realistic massif with snow-capped peaks, carved valleys, streams braiding down the flanks into lakes, gradient sky with fog — the strongest visual result of all runs. Like Fable 5, this agent verified its own rendered output in a browser before reporting — reinforcing the pattern that self-verification of the visual result separates working runs from failed ones.
 
 ## Interim observations
 

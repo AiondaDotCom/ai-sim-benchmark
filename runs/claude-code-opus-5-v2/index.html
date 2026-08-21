@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light" />
+    <meta name="theme-color" content="#87ceeb" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='26' font-size='26'%3E%F0%9F%8F%94%EF%B8%8F%3C/text%3E%3C/svg%3E" />
+    <title>Hydro Vista — autonomous 3D water simulation</title>
+    <style>
+      /* The page background is a sky gradient, never dark: it is what the
+         viewer sees for the handful of milliseconds before the first WebGL
+         frame lands, so there is no black flash at the start of a recording. */
+      :root {
+        color-scheme: light;
+        --sky-top: #4a97d8;
+        --sky-bottom: #c6e7f6;
+      }
+
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #87ceeb;
+        background-image: linear-gradient(to bottom, var(--sky-top) 0%, var(--sky-bottom) 100%);
+      }
+
+      body {
+        /* No selection, no callouts, no scroll chaining: nothing to interact with. */
+        user-select: none;
+        -webkit-user-select: none;
+        -webkit-touch-callout: none;
+        overscroll-behavior: none;
+        touch-action: none;
+        cursor: default;
+      }
+
+      canvas#scene {
+        display: block;
+        position: fixed;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        opacity: 0;
+        transition: opacity 700ms ease-out;
+      }
+
+      body.ready canvas#scene {
+        opacity: 1;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        canvas#scene {
+          transition: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="scene"></canvas>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
