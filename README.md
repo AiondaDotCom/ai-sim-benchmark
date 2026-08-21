@@ -4,6 +4,28 @@ This repository contains a reproducible coding challenge for comparing autonomou
 
 The challenge deliberately combines software architecture, numerical simulation, 3D rendering, UI design, testing, and performance optimization. Every agent should start from the same empty repository, receive the same prompt, and operate under the same constraints.
 
+## Demo videos
+
+Recorded demo runs from this benchmark, one per agent/model (fully autonomous demo — rain, mountain springs, orbiting camera, no UI):
+
+### Claude Code — Fable 5
+
+![Claude Code Fable 5 water simulation demo](runs/claude-code-fable-5/docs/demo.gif)
+
+Higher-quality video: [demo.mp4](runs/claude-code-fable-5/docs/demo.mp4) · Source: [`runs/claude-code-fable-5/`](runs/claude-code-fable-5/)
+
+### Claude Code — Opus 5
+
+*Run in progress — video coming soon.*
+
+### Claude Code — Sonnet 5
+
+*Run in progress — video coming soon.*
+
+### Claude Code — Haiku 4.5
+
+*Run in progress — video coming soon.*
+
 ## Benchmark prompt
 
 Copy the following prompt into the coding agent being evaluated:
