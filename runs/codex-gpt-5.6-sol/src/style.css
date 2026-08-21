@@ -1,0 +1,24 @@
+:root {
+  color-scheme: light;
+  background: #87ceeb;
+  font-family: system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: linear-gradient(to bottom, #62b6e3 0%, #b7dfec 16%, #d4edf3 24%, #d4edf3 42%, #b9ddcf 100%);
+}
+
+canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}

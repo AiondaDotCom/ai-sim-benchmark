@@ -68,6 +68,12 @@ Started 16:12 with the full final prompt (A1–A3 baked in); finished ~16:57 (~4
 
 **Run verdict: PASSED with 0 corrective interventions** (only a report reminder). Independent verification confirmed the report on first look: realistic massif with snow-capped peaks, carved valleys, streams braiding down the flanks into lakes, gradient sky with fog — the strongest visual result of all runs. Like Fable 5, this agent verified its own rendered output in a browser before reporting — reinforcing the pattern that self-verification of the visual result separates working runs from failed ones.
 
+### Codex CLI — GPT-5.6-sol xhigh (`runs/codex-gpt-5.6-sol/`)
+
+Started 17:09 with the same final prompt (A1–A3 baked in), run via `codex exec` (Codex CLI 0.149.0, model `gpt-5.6-sol`, reasoning effort `xhigh`, workspace-write sandbox with network access); finished 17:22 (~12 min).
+
+**Run verdict: PASSED with 0 corrective interventions.** The agent reported 5/5 tests, a clean production build, and its own browser smoke test (0 console errors, no UI elements). Independent verification confirmed on first look: low-poly mountain with snow cap and fog, procedural trees, water pooling in depressions with a stream running down the flank, gradient sky, auto orbit. Final state recorded in `runs/codex-gpt-5.6-sol/docs/demo.gif`. Note: smallest test suite of all passing runs (5 tests vs. 11/12/51) and fixed 97×97 grid.
+
 ## Interim observations
 
 - **Reported success ≠ working demo.** Two of three completed runs (Sonnet 5, Haiku 4.5) claimed success with passing tests and clean builds, but visual inspection of the actual rendered output found significant defects. Automated tests covered the simulation core, not the visual result.

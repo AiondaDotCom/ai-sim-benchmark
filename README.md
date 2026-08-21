@@ -34,6 +34,12 @@ Higher-quality video: [demo.mp4](runs/claude-code-sonnet-5/docs/demo.mp4) · Sou
 
 Higher-quality video: [demo.mp4](runs/claude-code-haiku-4-5/docs/demo.mp4) · Source: [`runs/claude-code-haiku-4-5/`](runs/claude-code-haiku-4-5/)
 
+### Codex CLI — GPT-5.6-sol (xhigh)
+
+![Codex GPT-5.6-sol water simulation demo](runs/codex-gpt-5.6-sol/docs/demo.gif)
+
+Higher-quality video: [demo.mp4](runs/codex-gpt-5.6-sol/docs/demo.mp4) · Source: [`runs/codex-gpt-5.6-sol/`](runs/codex-gpt-5.6-sol/)
+
 All follow-up messages that had to be sent to the agents (requirement changes and corrective interventions) are documented in [INTERVENTIONS.md](INTERVENTIONS.md).
 
 ## Benchmark prompt
