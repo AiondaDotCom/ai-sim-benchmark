@@ -1,0 +1,22 @@
+{
+  "action": {
+    "bpm": 98.36,
+    "beat_s": 0.61,
+    "cut_in_s": 60.26,
+    "length_s": 22.57
+  },
+  "calm": {
+    "cut_in_s": 35.09,
+    "length_s": 11.0
+  },
+  "outro": {
+    "cut_in_s": 24.0,
+    "length_s": 15.43
+  },
+  "output": {
+    "file": "assets/music/score.mp3",
+    "duration_s": 50.1,
+    "drop_at_s": 11.0,
+    "outro_at_s": 33.57
+  }
+}

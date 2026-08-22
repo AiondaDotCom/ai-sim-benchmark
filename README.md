@@ -90,6 +90,20 @@ Higher-quality video: [demo.mp4](runs/opencode-deepseek-v4-pro/docs/demo.mp4) ·
 
 All follow-up messages that had to be sent to the agents (requirement changes and corrective interventions) are documented in [INTERVENTIONS.md](INTERVENTIONS.md).
 
+## Scene 2: Lobby shootout ("Game 2")
+
+A second benchmark scene, this time a **multimodal production task**: a stylized homage to the classic film lobby-shootout sequence, built as a fully autonomous choreographed 3D demo — two protagonists, uniformed defenders, slow-motion set pieces, and persistent marble destruction. Beyond code, the agents must orchestrate mandatory generated assets: all textures via OpenAI image generation, all sound effects via ElevenLabs, and a scene-synchronized music track via Suno; Blender (via BlenderMCP) is available as an optional modeling route. The task prompt — including a beat-by-beat visual script of the film scene as the acceptance bar — is frozen in [PROMPT-LOBBY.md](PROMPT-LOBBY.md). Runs live in `runs-lobby/`.
+
+### Claude Code — Opus 5
+
+Passed after 1 corrective intervention (frozen prompt, 2026-08-22): a camera cut whose authored path ran through a standing guard, filling the frame with the model's geometry. Notable for the strongest self-verification behavior recorded in this repository so far: the agent screenshotted every beat before reporting and found and fixed seven real rendering bugs on its own, and the intervention response went beyond the reported defect — the agent instrumented a virtual playback of the entire cut list, found 16 near-camera episodes plus two protagonists clipping through columns, and fixed the failure mode structurally (a lens guard in the camera director) rather than patching one shot. 31/31 tests, ~6,100 lines TS, 62 generated asset files, fully offline. Details in [INTERVENTIONS.md](INTERVENTIONS.md).
+
+![Claude Code Opus 5 lobby shootout demo](runs-lobby/claude-code-opus-5/docs/demo.gif)
+
+*(GIF plays at 3× speed; the sequence runs 62 s in real time.)*
+
+Higher-quality video with the generated soundtrack and sound effects: [demo.mp4](runs-lobby/claude-code-opus-5/docs/demo.mp4) · Source: [`runs-lobby/claude-code-opus-5/`](runs-lobby/claude-code-opus-5/)
+
 ## Status of the recorded runs
 
 The first six runs in `runs/` are a **pilot round, not a protocol-conformant comparison.** They were carried out while the task requirements were still changing. The deviations below are documented rather than hidden; read the results as individual case studies, not as a ranking. The runs recorded after the prompt freeze (OpenCode — Kimi K3, Ox Alpha, DeepSeek V4 Pro) received the frozen prompt verbatim, but still share two deviations with the pilot round: generation ran on the host instead of a disposable VM, and the evaluator was the same non-independent orchestrating session.
