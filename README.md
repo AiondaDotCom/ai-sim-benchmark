@@ -93,17 +93,9 @@ A future round with the prompt frozen before the first run, and with evaluation 
 
 ## Benchmark prompt
 
-Copy the following prompt into the coding agent being evaluated:
+The canonical prompt is frozen in **[PROMPT.md](PROMPT.md)** — use it verbatim, adapting only the working-directory path. It reflects requirement changes A1–A3; the superseded original (interactive UI) is kept at the bottom of that file for the record and must not be used for new runs.
 
-> Build an interactive 3D water simulation in this empty repository.
->
-> Generate a procedural mountain landscape from a deterministic seed. The user must be able to enable rainfall or place a water source by clicking on the terrain. Water must flow downhill according to the local terrain gradient, collect in depressions, and form visible streams and lakes.
->
-> Use TypeScript, Vite, and Three.js. Implement camera controls, start/pause, reset, simulation-speed control, rainfall-intensity control, and seed selection. Do not use a prebuilt physics engine or external 3D assets.
->
-> Keep the simulation, rendering, and user-interface code cleanly separated. Add meaningful automated tests for deterministic terrain generation, approximate conservation of water mass, and downhill flow direction.
->
-> Install the required dependencies, run the tests and production build, and independently fix any errors you encounter. Finally, document the architecture, the simulation model, how to run the application, and all known limitations in the README.
+In short, the agent is asked to build a fully autonomous 3D water demo — procedural mountain terrain from a deterministic seed, water flowing downhill into streams and lakes, no visible UI controls, automatic camera orbit, gradient sky, a `start.sh`, automated tests for terrain determinism, mass conservation and flow direction, plus architecture documentation.
 
 ## Required constraints
 
