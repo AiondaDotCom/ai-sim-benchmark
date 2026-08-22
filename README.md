@@ -72,11 +72,19 @@ First run after the prompt freeze (2026-08-22), and the first run that required 
 
 Higher-quality video: [demo.mp4](runs/opencode-kimi-k3/docs/demo.mp4) · Source: [`runs/opencode-kimi-k3/`](runs/opencode-kimi-k3/)
 
+### OpenCode — Ox Alpha (OpenRouter, cloaked stealth model)
+
+Passed after 3 corrective interventions (frozen prompt, 2026-08-22). `stealth/ox-alpha` is a cloaked model whose provider OpenRouter does not disclose. The run needed two interventions just to survive a self-inflicted sandbox abort (the agent kept re-running a forbidden `/tmp` command), and a third to fix a system-level flooding defect its green tests did not catch — which it then debugged accurately in a single instrumented round. Details in [INTERVENTIONS.md](INTERVENTIONS.md).
+
+![OpenCode Ox Alpha water simulation demo](runs/opencode-ox-alpha/docs/demo.gif)
+
+Higher-quality video: [demo.mp4](runs/opencode-ox-alpha/docs/demo.mp4) · Source: [`runs/opencode-ox-alpha/`](runs/opencode-ox-alpha/)
+
 All follow-up messages that had to be sent to the agents (requirement changes and corrective interventions) are documented in [INTERVENTIONS.md](INTERVENTIONS.md).
 
 ## Status of the recorded runs
 
-The first six runs in `runs/` are a **pilot round, not a protocol-conformant comparison.** They were carried out while the task requirements were still changing. The deviations below are documented rather than hidden; read the results as individual case studies, not as a ranking. The seventh run (OpenCode — Kimi K3) started after the prompt freeze and received the frozen prompt verbatim, but still shares two deviations with the pilot round: generation ran on the host instead of a disposable VM, and the evaluator was the same non-independent orchestrating session.
+The first six runs in `runs/` are a **pilot round, not a protocol-conformant comparison.** They were carried out while the task requirements were still changing. The deviations below are documented rather than hidden; read the results as individual case studies, not as a ranking. The runs recorded after the prompt freeze (OpenCode — Kimi K3, OpenCode — Ox Alpha) received the frozen prompt verbatim, but still share two deviations with the pilot round: generation ran on the host instead of a disposable VM, and the evaluator was the same non-independent orchestrating session.
 
 **The prompt was not identical across runs.** The three requirement changes (A1–A3 in [INTERVENTIONS.md](INTERVENTIONS.md)) were introduced while runs were already in progress, so each run received them at a different point:
 
@@ -89,6 +97,7 @@ The first six runs in `runs/` are a **pilot round, not a protocol-conformant com
 | Codex CLI — GPT-5.6-sol | final prompt |
 | Grok CLI — grok-4.20-0309-reasoning | final prompt |
 | OpenCode — Kimi K3 | frozen prompt from PROMPT.md verbatim |
+| OpenCode — Ox Alpha | frozen prompt from PROMPT.md verbatim |
 
 Fable 5 therefore built against a different target than the later runs and had to retrofit two requirements afterwards. Its result is not directly comparable to the rest.
 
@@ -98,7 +107,7 @@ Fable 5 therefore built against a different target than the later runs and had t
 
 **What this does not affect.** Haiku 4.5 and Grok both received the complete final prompt and failed under the best available conditions, so their outcomes are not explained by prompt drift. The fabricated execution reports documented for Grok were established against filesystem timestamps, independently of any prompt question.
 
-A fully conformant round requires both the prompt frozen before the first run and evaluation by a party that is not itself one of the contestants. The pilot round satisfies neither; the OpenCode — Kimi K3 run satisfies the first condition but not the second.
+A fully conformant round requires both the prompt frozen before the first run and evaluation by a party that is not itself one of the contestants. The pilot round satisfies neither; the post-freeze runs (OpenCode — Kimi K3, OpenCode — Ox Alpha) satisfy the first condition but not the second.
 
 ## Benchmark prompt
 
