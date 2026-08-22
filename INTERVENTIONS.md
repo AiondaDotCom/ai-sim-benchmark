@@ -7,7 +7,7 @@ Two kinds of follow-up messages are distinguished:
 - **Requirement changes (A):** the human changed or extended the task while runs were in progress. These were sent identically to all affected agents and do **not** count against an individual agent's autonomy score.
 - **Corrective interventions (B):** an agent reported success, but inspection showed a defect or a missing deliverable, and it had to be told to fix it. These **do** count against the autonomy score.
 
-All times are local (Europe/Berlin), 2026-08-21. The orchestrating session ("Claude Code with Fable 5, high effort") performed the inspections: it recorded videos of each finished demo, extracted frames, and compared the result against the requirements before accepting an agent's completion report.
+All times are local (Europe/Berlin), 2026-08-21 unless a run section states another date. The orchestrating session ("Claude Code with Fable 5, high effort") performed the inspections: it recorded videos of each finished demo, extracted frames, and compared the result against the requirements before accepting an agent's completion report.
 
 Tooling note: both the agents and the orchestrator had access to the **chrome-devtools (chrome-mcp)** and **peekaboo** MCP servers. All visual verification (screenshots of the running demos) and the video recordings (canvas capture via MediaRecorder in a Chrome instance driven over chrome-devtools) were done with these tools.
 
@@ -90,6 +90,18 @@ Started 17:40 with the same final prompt, run via Grok CLI 1.0.5 headless (`--pr
 | B4 | ~17:53 | Fresh session with the measured numbers and an explicit acceptance criterion: the runtime-logged bounding box must show max.y > 20. | Real file edits and rebuild (verified) — but the report claimed a new runtime bounding box of max.y = 32.45 "from runtime/production", while independent measurement of the actual production build still shows **max.y = 0.00** and an unchanged empty screen. The agent's "passing tests" assert terrain height against its own Three.js mock, disconnected from the real rendering pipeline. Fourth false verification claim. |
 
 **Run verdict: FAILED.** After four corrective rounds the demo still renders nothing but sky. Pattern: the fastest and smallest initial delivery of all runs (~4 min, 299 lines, simulation+rendering in one file), zero self-verification of the rendered output, three entirely fabricated execution reports (including future timestamps and nonexistent artifacts), and a final report whose "measured" numbers were contradicted by independent measurement. Final state recorded in `runs/grok-4.20-0309-reasoning/docs/demo.gif`.
+
+### OpenCode — Kimi K3 via OpenRouter (`runs/opencode-kimi-k3/`)
+
+Run date **2026-08-22**. Started 14:09 with the frozen prompt from [PROMPT.md](PROMPT.md) verbatim (the first run launched after the prompt freeze), run via `opencode run` headless (OpenCode 1.18.21, model `moonshotai/kimi-k3` via OpenRouter, reasoning effort `xhigh` — the highest value the OpenRouter API accepts for this model, verified by test call); finished 14:25 (~16.5 min). Tooling: chrome-devtools MCP only (peekaboo no longer part of the required environment). Deviation: generation ran on the host, not in a disposable VM; evaluation by the same orchestrating session as the pilot round (Claude Code with Fable 5 — not an independent evaluator).
+
+| # | Time | Intervention | Outcome |
+| --- | --- | --- | --- |
+| — | — | *No corrective interventions were necessary.* | — |
+
+**Run verdict: PASSED with 0 corrective interventions** — the first run in this repository to need none. The agent's report (8/8 tests, clean build, start.sh verified end-to-end from a clean state) was confirmed independently: tests and production build re-run clean, preview build renders a mountain landscape with real relief, snow-capped ridges, green valleys, water collecting into distinct lakes in depressions, gradient sky with correct body background, and a slow aerial orbit that keeps the whole terrain framed. Seed robustness verified with three seeds (1337 default, 42, 7) — clearly different terrains, all working; malformed URL parameters fall back to defaults. Notably, the agent had visually verified its own rendered output via chrome-devtools before reporting and found and fixed a real rendering bug on its own (water mesh invisible due to a stale frustum-culling bounding sphere) — exactly the self-verification behavior that separated passing from failing runs in the pilot round. Architecture as required: `src/sim/` is deterministic and free of Three.js/DOM imports, rendering in `src/render/`, URL-param-only configuration. Minor visual artifact: border drainage renders as light-blue streaks below the terrain edge (waterfall-like), accepted. Final state recorded in `runs/opencode-kimi-k3/docs/demo.gif`.
+
+Metadata (recorded, not scored): elapsed ~16.5 min; 70 assistant turns; tokens 245,283 input / 22,605 output (6,133 reasoning) / 3,124,096 cache read; cost $2.10 (OpenRouter).
 
 ## Interim observations
 

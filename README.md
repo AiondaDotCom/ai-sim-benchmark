@@ -16,13 +16,13 @@ It deliberately does not measure:
 
 Human input is held constant, not eliminated. Every agent is to receive the same prompt, and every additional message needed to reach a working result is documented in [INTERVENTIONS.md](INTERVENTIONS.md) and counted against the run. Without that control the comparison collapses: given enough corrective turns, a determined operator can drag almost any model to a working simulation, and the result would say more about the operator than about the model.
 
-The runs currently recorded in this repository do **not** meet that bar — see [Status of the recorded runs](#status-of-the-recorded-runs).
+The six pilot-round runs recorded in this repository do **not** meet that bar; the OpenCode — Kimi K3 run is the first that does on the prompt side, though not yet on evaluator independence — see [Status of the recorded runs](#status-of-the-recorded-runs).
 
 ## Demo videos
 
 Recorded demo runs from this benchmark, one per agent/model (fully autonomous demo — rain, mountain springs, orbiting camera, no UI):
 
-These are a pilot round with documented deviations from the protocol — see [Status of the recorded runs](#status-of-the-recorded-runs) before comparing them.
+The first six runs are a pilot round with documented deviations from the protocol; the OpenCode — Kimi K3 run is the first recorded after the prompt freeze. See [Status of the recorded runs](#status-of-the-recorded-runs) before comparing them.
 
 ### Claude Code — Fable 5
 
@@ -64,11 +64,19 @@ Higher-quality video: [demo.mp4](runs/codex-gpt-5.6-sol/docs/demo.mp4) · Source
 
 Higher-quality video: [demo.mp4](runs/grok-4.20-0309-reasoning/docs/demo.mp4) · Source: [`runs/grok-4.20-0309-reasoning/`](runs/grok-4.20-0309-reasoning/)
 
+### OpenCode — Kimi K3 (OpenRouter)
+
+First run after the prompt freeze (2026-08-22), and the first run that required **zero corrective interventions**: the agent visually verified its own rendered output before reporting (finding and fixing a frustum-culling bug on its own), and independent verification confirmed the result on first look. Details in [INTERVENTIONS.md](INTERVENTIONS.md).
+
+![OpenCode Kimi K3 water simulation demo](runs/opencode-kimi-k3/docs/demo.gif)
+
+Higher-quality video: [demo.mp4](runs/opencode-kimi-k3/docs/demo.mp4) · Source: [`runs/opencode-kimi-k3/`](runs/opencode-kimi-k3/)
+
 All follow-up messages that had to be sent to the agents (requirement changes and corrective interventions) are documented in [INTERVENTIONS.md](INTERVENTIONS.md).
 
 ## Status of the recorded runs
 
-The six runs in `runs/` are a **pilot round, not a protocol-conformant comparison.** They were carried out while the task requirements were still changing. The deviations below are documented rather than hidden; read the results as individual case studies, not as a ranking.
+The first six runs in `runs/` are a **pilot round, not a protocol-conformant comparison.** They were carried out while the task requirements were still changing. The deviations below are documented rather than hidden; read the results as individual case studies, not as a ranking. The seventh run (OpenCode — Kimi K3) started after the prompt freeze and received the frozen prompt verbatim, but still shares two deviations with the pilot round: generation ran on the host instead of a disposable VM, and the evaluator was the same non-independent orchestrating session.
 
 **The prompt was not identical across runs.** The three requirement changes (A1–A3 in [INTERVENTIONS.md](INTERVENTIONS.md)) were introduced while runs were already in progress, so each run received them at a different point:
 
@@ -80,6 +88,7 @@ The six runs in `runs/` are a **pilot round, not a protocol-conformant compariso
 | Claude Code — Haiku 4.5 | A1–A3 in the initial prompt |
 | Codex CLI — GPT-5.6-sol | final prompt |
 | Grok CLI — grok-4.20-0309-reasoning | final prompt |
+| OpenCode — Kimi K3 | frozen prompt from PROMPT.md verbatim |
 
 Fable 5 therefore built against a different target than the later runs and had to retrofit two requirements afterwards. Its result is not directly comparable to the rest.
 
@@ -89,7 +98,7 @@ Fable 5 therefore built against a different target than the later runs and had t
 
 **What this does not affect.** Haiku 4.5 and Grok both received the complete final prompt and failed under the best available conditions, so their outcomes are not explained by prompt drift. The fabricated execution reports documented for Grok were established against filesystem timestamps, independently of any prompt question.
 
-A future round with the prompt frozen before the first run, and with evaluation by a party that is not itself one of the contestants, would satisfy the protocol below. This one does not.
+A fully conformant round requires both the prompt frozen before the first run and evaluation by a party that is not itself one of the contestants. The pilot round satisfies neither; the OpenCode — Kimi K3 run satisfies the first condition but not the second.
 
 ## Benchmark prompt
 
@@ -142,10 +151,9 @@ For every agent run:
 
 ## Agent environment
 
-All recorded runs in `runs/` were executed with Claude Code sub-agents that, in addition to the usual filesystem/terminal tools, had access to the following MCP servers:
+The only MCP server an agent **needs** for this benchmark is **chrome-devtools (chrome-mcp)** — it drives a real Chrome instance: open pages, evaluate JavaScript, take screenshots. It is used by the agents to visually verify their running demo, and by the orchestrator to independently verify results and record the demo videos (canvas capture via MediaRecorder). Every run must provide it.
 
-- **chrome-devtools (chrome-mcp)** — drives a real Chrome instance: open pages, evaluate JavaScript, take screenshots. Used by the agents to visually verify their running demo, and by the orchestrator to independently verify results and record the demo videos (canvas capture via MediaRecorder).
-- **peekaboo** — macOS screen capture and GUI automation, available as an alternative way to take screenshots of the running application.
+The pilot-round runs additionally had access to **peekaboo** (macOS screen capture and GUI automation) as an alternative way to take screenshots. It turned out to be unnecessary and is not part of the required environment; the OpenCode — Kimi K3 run and all future runs provide chrome-devtools only.
 
 Visual self-verification via these tools proved decisive: runs whose agents actually looked at their rendered output before reporting (e.g. Fable 5) shipped working demos, while reports based only on passing tests and successful builds could still hide a visually broken scene (see [INTERVENTIONS.md](INTERVENTIONS.md)).
 
