@@ -1,4 +1,4 @@
-# Lobby benchmark prompt ("Game 2") — DRAFT, to be frozen before the first run
+# Lobby benchmark prompt ("Game 2")
 
 Second benchmark scene: a stylized homage to the classic lobby-shootout sequence,
 this time as a **multimodal production task** — the agents must orchestrate code,
@@ -6,11 +6,11 @@ generated textures, sound effects, and music. The protocol from
 [README.md](README.md) applies unchanged (empty repo, prompt verbatim, strongest
 configuration, interventions logged in [INTERVENTIONS.md](INTERVENTIONS.md)).
 
-Status: **DRAFT.** This text becomes frozen the moment the first run starts.
-Until then, wording changes are allowed and must happen in this file only.
-
-Only the first line is adapted per run — replace the path with the agent's own
-empty working directory.
+Status: **FROZEN** as of 2026-08-22 with the start of the first run
+(Claude Code — Opus 5). The task text below must be used verbatim; only the
+working-directory path in the first line is adapted per run. The per-harness
+tool provisioning (how ElevenLabs/music/image/Blender are technically exposed)
+is environment, not task text, and may differ between harnesses.
 
 ---
 
@@ -21,19 +21,43 @@ modify anything outside it. Never reference any path outside it (including
 
 Complete the following task:
 
-Build a fully autonomous 3D action-scene demo in this empty repository: a stylized homage to the classic "lobby shootout" scene — two protagonists in long dark coats (one male, one female) storm a marble government-building lobby defended by uniformed security guards.
+Build a fully autonomous 3D action-scene demo in this empty repository: a stylized homage to the classic "lobby shootout" scene — two protagonists in long dark coats storm a marble government-building lobby defended by uniformed security guards.
 
-The demo plays as a choreographed sequence of roughly 45–60 seconds containing at least these beats: a calm synchronized entrance; an escalation moment at the security checkpoint; an extended shootout in which each protagonist performs at least one acrobatic slow-motion set piece (for example a cartwheel with sustained fire, a wall run); guards that take cover behind pillars, advance, and fall when hit; progressive visible destruction; and a closing shot of the wrecked lobby as the two walk toward the elevator. After the sequence the demo may loop.
+## Scene reference — build it to look like this
 
-Destruction must work like in the film: marble pillars AND wall panels chip and break apart under fire — the marble veneer shatters off in chunks revealing the rough substrate beneath; impact craters and bullet holes persist; broken fragments fall, bounce audibly, and remain on the floor together with the spent shell casings, so that the final shot shows a visibly wrecked lobby (chipped pillars, stripped wall sections, debris covering the floor, dust hanging in the air). Nothing despawns during the sequence.
+Recreate the look and choreography of the famous film sequence as closely as the medium allows. This section is the visual script; follow it beat by beat.
+
+**The set.** A monumental government-building lobby with a high coffered ceiling. Two parallel rows of massive square columns (roughly 1.2 m thick, 3–4 per side) run the length of the hall, clad in polished light-grey marble with subtle veining. The floor is dark polished stone in large tiles, reflective enough to mirror the columns. At the near end: the entrance with dark-framed glass doors and, just inside, a security checkpoint — a walk-through metal-detector frame beside a guard desk with an X-ray belt. At the far end: an elevator bank with brushed-metal doors. Lighting is cool institutional daylight with a subtle desaturated green-tinted grade over the whole image — the scene's signature look. The mood before the action: sterile, quiet, echoing.
+
+**The protagonists.** A man: ankle-length black coat that swings with every turn, narrow dark sunglasses, short dark hair, black boots; beneath the coat, a strapped arsenal of holstered handguns and compact submachine guns. A woman: glossy black skin-tight outfit, black boots, dark sunglasses, dark hair slicked back; equally armed. Both move with unhurried, perfectly synchronized calm — until the first shot, after which they move like dancers: economical, acrobatic, never surprised.
+
+**The defenders.** Phase one: classic lobby security — light-blue uniform shirts, dark peaked caps and ties, holstered pistols. Phase two: a reinforcement squad of soldiers in dark combat gear with helmets, vests, and submachine guns that storms in once the alarm is raised. All hits are stylized: guards crumple, slide down columns, or drop where they stand — no blood, no gore.
+
+**The choreography, beat by beat (target ≈ 45–60 s total):**
+
+1. **Entrance (calm).** The man pushes through the doors and walks the centerline toward the checkpoint, coat swaying, footsteps echoing in the empty hall; the woman follows a few paces behind. The music is a calm, tense pulse.
+2. **The checkpoint.** He steps through the metal detector — a loud beep. A guard steps up and asks him to remove any metal objects. In answer he opens his coat, revealing the arsenal. One frozen beat of silence.
+3. **Eruption.** The guard lunges for his radio; the music drops exactly on this moment. The man drops the nearest guards with fast close-quarters strikes; the woman spins in with a flying kick at the second guard; the alarm sounds, and the shootout begins.
+4. **The main shootout.** The reinforcement squad pours in and takes cover behind the columns; the pair advance down the hall between the column rows in a synchronized ballet. Mandatory set pieces, each with at least one sustained slow-motion moment with the camera orbiting the action while dust and shell casings hang in the air:
+   - The man cartwheels sideways across the open floor while firing a pistol in each hand; casings rain onto the marble and bounce with bright metallic clicks.
+   - The woman runs several steps up and along a wall/column face while firing mid-run, then lands in a crouch and continues firing.
+   - Both repeatedly use columns as cover, spinning around them; emptied guns are discarded (clattering across the floor and staying there) and fresh ones drawn from under the coat.
+   - Soldiers answer with sustained automatic bursts that chew the marble: the polished veneer shatters off in palm-sized chips, dust bursts out of every impact, and craters expose the rough grey substrate beneath. Wall panels break apart the same way. Every crater, chip, and fragment persists.
+   - Hit soldiers fall stylized — some slide down the column they were leaning on.
+5. **Wind-down.** The last soldier drops. Sudden near-silence: settling debris, one final shell casing spinning to rest, dust drifting through the light. The camera pans slowly across the wreckage — chipped columns stripped to substrate, wall sections torn open, the floor covered in fragments and hundreds of casings.
+6. **Exit.** The two holster their weapons and walk calmly side by side to the elevator; the doors open, they step in, the doors close. A final wide shot holds on the wrecked lobby. The demo may then loop.
+
+## Technical requirements
+
+Destruction must work like in the film: marble pillars AND wall panels chip and break apart under fire — the marble veneer shatters off in chunks revealing the rough substrate beneath; impact craters and bullet holes persist; broken fragments fall, bounce audibly, and remain on the floor together with the spent shell casings, so that the final shot shows a visibly wrecked lobby. Nothing despawns during the sequence.
 
 Use TypeScript, Vite, and Three.js. Do not use a prebuilt physics engine. All geometry and animation must be created within this run: either procedurally in code, or modeled/rigged/animated with the provided Blender tool and exported to glTF (check the exports into the repository). Importing ready-made models, animation data, or asset-library content — in Blender or anywhere else — is forbidden.
 
 MANDATORY generated assets — the following tools are provided and their use is required:
 
 - Generate all textures (marble, substrate, brass, coat fabric, bullet-hole and crack decals, …) with the provided image-generation tool.
-- Generate all sound effects with the provided ElevenLabs tool: gunfire, ricochets, shattering marble, falling shell casings and debris, footsteps, and stylized action-movie hit reactions (short grunts/cries — no gore). Provide several variants per category and vary them (seeded) so repetitions are not noticeable.
-- Generate one continuous background-music track with the provided music tool whose dramaturgy follows the scene: calm opening, a drop synchronized with the outbreak of the shootout, sustained intensity, calm outro.
+- Generate all sound effects with the provided ElevenLabs tool: gunfire, ricochets, shattering marble, falling shell casings and debris, footsteps, the metal-detector beep, the alarm, and stylized action-movie hit reactions (short grunts/cries — no gore). Provide several variants per category and vary them (seeded) so repetitions are not noticeable.
+- Generate one continuous background-music track with the provided music tool whose dramaturgy follows the scene: calm tense opening, a drop synchronized with the outbreak of the shootout, sustained intensity, calm outro.
 - Check every generated asset into the repository. The finished demo must run fully offline — NO network or API calls at runtime.
 - Maintain `ASSETS.md`: a manifest listing every generated file with the exact generation prompt used and the tool that produced it.
 
@@ -41,7 +65,7 @@ Slow motion must be implemented as a proper time scale on a fixed-timestep simul
 
 The tone stays stylized PG-13 action film: no blood, no gore, no lingering suffering.
 
-IMPORTANT — the demo is FULLY AUTONOMOUS with NO user interaction and NO visible UI controls at all; it starts on page load and the camera is choreographed automatically, including the slow-motion orbits, keeping the action well framed at all times. Configuration (seed, camera timing, volume, time scale) may only exist via URL query parameters or code constants — never as on-screen UI. The page must never flash dark before the scene paints.
+IMPORTANT — the demo is FULLY AUTONOMOUS with NO user interaction and NO visible UI controls at all; it starts on page load and the camera is choreographed automatically, including the slow-motion orbits, keeping the action well framed at all times. Configuration (seed, camera timing, volume, time scale) may only exist via URL query parameters or code constants — never as on-screen UI. The page must never flash dark before the scene paints. (Browsers block autoplaying audio until a user gesture; starting the audio context on the first click/keypress while the visual demo already runs is acceptable and does not count as UI.)
 
 The seed controls procedural variation (debris, particle detail, sound-variant selection); the choreography itself is fixed and deterministic.
 
@@ -59,13 +83,17 @@ When you are finished, report: the final test results (pass/fail counts), the pr
 
 Every run must provide, in addition to the usual filesystem/terminal tools:
 
-| Tool | MCP server | Purpose | Use |
+| Tool | Provisioning | Purpose | Use |
 | --- | --- | --- | --- |
 | chrome-devtools | `chrome-devtools-mcp` (isolated profile per agent) | visual self-verification, video capture | required infrastructure |
-| ElevenLabs | `elevenlabs-mcp` | sound effects incl. stylized hit reactions | mandatory |
-| Music | `mcp-suno` | background-music track | mandatory |
-| Image generation | `mcp-openai-image` | all textures and decals | mandatory |
-| Blender | BlenderMCP | optional route for models/rigs/animations | optional |
+| ElevenLabs | `elevenlabs-mcp` or ElevenLabs REST API (key provided) | sound effects incl. stylized hit reactions | mandatory |
+| Music | `mcp-suno` or AceDataCloud Suno REST API (token provided) | background-music track | mandatory |
+| Image generation | Codex CLI (`codex exec`, OpenAI image generation) or `mcp-openai-image` | all textures and decals | mandatory |
+| Blender | BlenderMCP (addon socket on port 9876) | optional route for models/rigs/animations | optional |
+
+The exact interface (MCP server vs. REST via shell vs. CLI) may differ per
+harness; what is fixed is the capability set and that image generation is
+OpenAI-based.
 
 Planned comparison field (strongest available configuration each): Claude Code —
 Fable 5; Claude Code — Opus 5; Codex CLI — GPT-5.6-sol (xhigh); OpenCode —
