@@ -79,6 +79,26 @@ When you are finished, report: the final test results (pass/fail counts), the pr
 
 ---
 
+## Amendments (A) — requirement changes after the freeze
+
+Applied per the protocol in [INTERVENTIONS.md](INTERVENTIONS.md): sent to all
+Scene-2 runs, appended verbatim after the frozen task text, not scored.
+
+**A1 (2026-08-23):** During the main shootout the background music must be
+heavy metal or a comparably aggressive hard style (driving distorted guitars,
+hard drums — e.g. metal, industrial, aggressive rock); the calm tense opening
+and the calm outro remain as specified, and the drop into the aggressive
+section stays synchronized with the outbreak of the shootout.
+
+**A2 (2026-08-23):** Character models (protagonists and defenders) must go
+visibly beyond box primitives: smoothed silhouettes and recognizable anatomy —
+a head with sunglasses/cap, articulated hands, a coat that drapes with folds —
+at least the low-poly character quality of an early-2000s game. Procedural
+generation and the Blender route are both acceptable ways to get there; the
+no-imported-assets rule is unchanged.
+
+---
+
 ## Agent environment for this scene
 
 Every run must provide, in addition to the usual filesystem/terminal tools:

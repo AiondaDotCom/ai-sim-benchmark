@@ -141,6 +141,13 @@ Metadata (recorded, not scored): elapsed ~59 min wall clock incl. all rounds (in
 
 The second benchmark scene (frozen in [PROMPT-LOBBY.md](PROMPT-LOBBY.md)) adds mandatory generated assets: OpenAI image generation (via Codex CLI) for all textures, ElevenLabs for all sound effects, Suno for the music track, plus optional BlenderMCP and required chrome-devtools self-verification. Runs live in `runs-lobby/`.
 
+### Scene 2 requirement changes (A)
+
+| # | Date | Change | Sent to |
+| --- | --- | --- | --- |
+| A1 | 2026-08-23 | During the main shootout the background music must be heavy metal or a comparably aggressive hard style (driving distorted guitars, hard drums); calm opening/outro and the synchronized drop stay as specified. Full text in [PROMPT-LOBBY.md](PROMPT-LOBBY.md), "Amendments". | Claude Code — Fable 5 (in the initial prompt); Claude Code — Opus 5 (follow-up, 00:57) |
+| A2 | 2026-08-23 | Character models must go visibly beyond box primitives: smoothed silhouettes, recognizable anatomy (head with sunglasses/cap, hands, draping coat), at least early-2000s low-poly game quality. Full text in [PROMPT-LOBBY.md](PROMPT-LOBBY.md), "Amendments". | Claude Code — Fable 5 (follow-up, 00:57, shortly after run start); Claude Code — Opus 5 (follow-up, 00:57) |
+
 ### Claude Code — Opus 5 (`runs-lobby/claude-code-opus-5/`)
 
 Run date **2026-08-22**. Started 21:57 with the frozen prompt from PROMPT-LOBBY.md verbatim (the prompt was frozen at this run's start), run as a Claude Code subagent (model Opus 5), tool provisioning per the prompt's environment appendix (Codex CLI for images, ElevenLabs/Suno REST, BlenderMCP available, chrome-devtools MCP). Initial completion report at 23:19 (~82 min): 31/31 tests across 6 files, clean production build, 120 fps at 1280×720, full asset pipeline (16 runtime textures + 16 source originals, 43 SFX in 21 categories, 3 Suno stems assembled into one 50.1 s score with the drop beat-snapped to the eruption), ~6,100 lines TS with a fully deterministic head-less `sim/` layer. Before reporting, the agent had screenshotted every beat and found and fixed **seven real rendering bugs on its own** (mirrored wall slabs, damage-map texture uploads dropped on multi-step frames, bodies floating from foot-pivot rotations, the far wall cutting through the elevator cars, self-blocking door/elevator openings, black metals without an environment probe, tumbling bodies leaving frame) — the strongest self-verification behavior recorded in this repository so far.
