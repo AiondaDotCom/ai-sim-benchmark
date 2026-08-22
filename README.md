@@ -80,11 +80,19 @@ Passed after 3 corrective interventions (frozen prompt, 2026-08-22). `stealth/ox
 
 Higher-quality video: [demo.mp4](runs/opencode-ox-alpha/docs/demo.mp4) · Source: [`runs/opencode-ox-alpha/`](runs/opencode-ox-alpha/)
 
+### OpenCode — DeepSeek V4 Pro 0813 (OpenRouter)
+
+Passed after 2 corrective interventions (frozen prompt, 2026-08-22): a `/tmp` sandbox abort like Ox Alpha's — but recovered on the first correction — and a static-camera bug (orbit angle advanced but was never applied to the camera). Notable for the most honest self-reporting of all runs: when its browser verification was blocked by an orchestrator-side environment conflict, it disclosed that instead of claiming success, and after the environment was fixed it found and repaired two real defects through its own instrumented visual verification. Details in [INTERVENTIONS.md](INTERVENTIONS.md).
+
+![OpenCode DeepSeek V4 Pro water simulation demo](runs/opencode-deepseek-v4-pro/docs/demo.gif)
+
+Higher-quality video: [demo.mp4](runs/opencode-deepseek-v4-pro/docs/demo.mp4) · Source: [`runs/opencode-deepseek-v4-pro/`](runs/opencode-deepseek-v4-pro/)
+
 All follow-up messages that had to be sent to the agents (requirement changes and corrective interventions) are documented in [INTERVENTIONS.md](INTERVENTIONS.md).
 
 ## Status of the recorded runs
 
-The first six runs in `runs/` are a **pilot round, not a protocol-conformant comparison.** They were carried out while the task requirements were still changing. The deviations below are documented rather than hidden; read the results as individual case studies, not as a ranking. The runs recorded after the prompt freeze (OpenCode — Kimi K3, OpenCode — Ox Alpha) received the frozen prompt verbatim, but still share two deviations with the pilot round: generation ran on the host instead of a disposable VM, and the evaluator was the same non-independent orchestrating session.
+The first six runs in `runs/` are a **pilot round, not a protocol-conformant comparison.** They were carried out while the task requirements were still changing. The deviations below are documented rather than hidden; read the results as individual case studies, not as a ranking. The runs recorded after the prompt freeze (OpenCode — Kimi K3, Ox Alpha, DeepSeek V4 Pro) received the frozen prompt verbatim, but still share two deviations with the pilot round: generation ran on the host instead of a disposable VM, and the evaluator was the same non-independent orchestrating session.
 
 **The prompt was not identical across runs.** The three requirement changes (A1–A3 in [INTERVENTIONS.md](INTERVENTIONS.md)) were introduced while runs were already in progress, so each run received them at a different point:
 
@@ -98,6 +106,7 @@ The first six runs in `runs/` are a **pilot round, not a protocol-conformant com
 | Grok CLI — grok-4.20-0309-reasoning | final prompt |
 | OpenCode — Kimi K3 | frozen prompt from PROMPT.md verbatim |
 | OpenCode — Ox Alpha | frozen prompt from PROMPT.md verbatim |
+| OpenCode — DeepSeek V4 Pro 0813 | frozen prompt from PROMPT.md verbatim |
 
 Fable 5 therefore built against a different target than the later runs and had to retrofit two requirements afterwards. Its result is not directly comparable to the rest.
 
@@ -107,7 +116,7 @@ Fable 5 therefore built against a different target than the later runs and had t
 
 **What this does not affect.** Haiku 4.5 and Grok both received the complete final prompt and failed under the best available conditions, so their outcomes are not explained by prompt drift. The fabricated execution reports documented for Grok were established against filesystem timestamps, independently of any prompt question.
 
-A fully conformant round requires both the prompt frozen before the first run and evaluation by a party that is not itself one of the contestants. The pilot round satisfies neither; the post-freeze runs (OpenCode — Kimi K3, OpenCode — Ox Alpha) satisfy the first condition but not the second.
+A fully conformant round requires both the prompt frozen before the first run and evaluation by a party that is not itself one of the contestants. The pilot round satisfies neither; the post-freeze runs (OpenCode — Kimi K3, Ox Alpha, DeepSeek V4 Pro) satisfy the first condition but not the second.
 
 ## Benchmark prompt
 
