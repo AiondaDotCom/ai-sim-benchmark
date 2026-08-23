@@ -210,6 +210,10 @@ surrendering figures, no degrading treatment of the fallen, hits and falls stay
 brief and stylized, and the camera never dwells on a dying or dead figure. The
 tone remains choreographed action ballet, not cruelty.
 
+## Orchestration roles for future runs
+
+Recorded from the Scene 2 runs (details in [INTERVENTIONS.md](INTERVENTIONS.md), operating rules in [README.md](README.md) and [CLAUDE.md](CLAUDE.md)): the orchestrator holds the acceptance criteria and does the judging, builder subagents run in parallel, and deep review is delegated to fresh critic subagents rather than performed by the orchestrator itself. No agent signs off its own work, and any acceptance criterion that can be measured becomes a test instead of a screenshot judgement.
+
 ---
 
 ## Agent environment for this scene
