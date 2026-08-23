@@ -124,7 +124,22 @@ staining on uniforms of downed defenders. Still no gore: no dismemberment, no
 wound close-ups, no lingering suffering. (Published demo videos will be marked
 as sensitive content where platforms require it.)
 
-## Copyright guardrails
+**A5 (2026-08-23):** Ballistics special-effects package. Bullets must be
+modeled as real visible projectiles, not hitscan-only effects:
+
+- Every shot spawns a visible tracer projectile with a hot glowing head and a
+  light trail that subtly illuminates nearby surfaces (game-style tracer glow);
+  in slow motion the projectile's flight is clearly readable through the room.
+- At least one slow-motion insert shows a bullet visibly leaving the muzzle —
+  muzzle flash, smoke, and the ejected casing readable in the same moment.
+- At least one slow-motion insert makes individual brass casings the visual
+  subject: ejecting, spinning, falling, and bouncing close to camera.
+- One additional set piece: a protagonist dodges incoming fire in extreme slow
+  motion (leaning back / twisting aside) while the camera orbits; the passing
+  bullets carry an air-wake effect — visible ripple/shockwave distortion trails
+  through the air.
+- All projectile effects run inside the deterministic fixed-timestep simulation
+  (same seed ⇒ same trajectories) and must not break the frame-rate target.
 
 The scene is an **homage, not a replica**. Binding for every run:
 
