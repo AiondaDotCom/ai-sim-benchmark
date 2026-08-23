@@ -128,6 +128,15 @@ as sensitive content where platforms require it.)
 sprays, no stains), restoring the frozen prompt's original no-blood rule, so
 published clips need no sensitive-content marking.
 
+**A7 (2026-08-23):** Max-Payne-style ballistics detail package: bullets are
+real modeled geometry (ogive nose, copper/brass body, spinning around the
+flight axis) that clearly reads in slow motion beneath the tracer glow; one
+bullet-cam set piece where the camera travels with the single bullet that
+drops the last soldier (extreme slow motion, air-wake trailing, brief stylized
+impact, cut wide — violence limits apply); and a casing slow-motion drop beat
+followed close-up from ejection to floor with its bounce sounds pitched into
+the slow motion, one clink per visible contact.
+
 **A5 (2026-08-23):** Ballistics special-effects package. Bullets must be
 modeled as real visible projectiles, not hitscan-only effects:
 

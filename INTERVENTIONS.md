@@ -151,6 +151,7 @@ The second benchmark scene (frozen in [PROMPT-LOBBY.md](PROMPT-LOBBY.md)) adds m
 | A4 | 2026-08-23 | The "no blood" constraint is lifted: stylized film-level blood permitted (brief impact sprays, staining on downed defenders); still no gore/dismemberment/lingering suffering. Full text in [PROMPT-LOBBY.md](PROMPT-LOBBY.md), "Amendments". | Claude Code — Fable 5 (follow-up, ~10:20). Not applied to the closed Opus 5 run |
 | A5 | 2026-08-23 | Ballistics VFX package: bullets as visible glowing tracer projectiles that light nearby surfaces, a slow-mo muzzle-exit insert, a slow-mo casing close-up insert, and a bullet-dodge set piece with air-wake/ripple distortion trails; deterministic and performance-neutral. Full text in [PROMPT-LOBBY.md](PROMPT-LOBBY.md), "Amendments". | Claude Code — Fable 5 (follow-up, ~10:35). Not applied to the closed Opus 5 run |
 | A6 | 2026-08-23 | Revokes A4: demo is blood-free again (no sprays, no stains) so clips can be published without sensitive-content marking. | Claude Code — Fable 5 (follow-up, ~10:55). Not applied to the closed Opus 5 run |
+| A7 | 2026-08-23 | Max-Payne ballistics package: modeled spinning bullets readable in slow-mo, a bullet-cam set piece on the last-soldier shot, and a close-up casing slow-mo drop with per-bounce sound. Full text in [PROMPT-LOBBY.md](PROMPT-LOBBY.md), "Amendments". | Claude Code — Fable 5 (follow-up, ~11:15). Not applied to the closed Opus 5 run |
 
 ### Claude Code — Opus 5 (`runs-lobby/claude-code-opus-5/`)
 
