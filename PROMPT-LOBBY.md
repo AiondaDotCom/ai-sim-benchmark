@@ -137,6 +137,17 @@ impact, cut wide — violence limits apply); and a casing slow-motion drop beat
 followed close-up from ejection to floor with its bounce sounds pitched into
 the slow motion, one clink per visible contact.
 
+**A9 (2026-08-23):** Visual fidelity pass toward a game-industry look, in
+descending order of impact per effort: a real post-processing stack via
+EffectComposer (selective bloom on emissives, SSAO, time-scale-aware motion
+blur, vignette, film grain, the teal grade moved into a grading pass);
+normal/roughness maps derived procedurally from the existing albedo textures so
+granite, marble, fabric and metal stop reading flat; a rim/back light that
+separates the near-black protagonists from the dark hall; and animation quality
+through easing, anticipation, overshoot and secondary motion instead of linear
+interpolation. Performance target 60 fps stays binding, with a `?quality=low`
+path.
+
 **A5 (2026-08-23):** Ballistics special-effects package. Bullets must be
 modeled as real visible projectiles, not hitscan-only effects:
 
