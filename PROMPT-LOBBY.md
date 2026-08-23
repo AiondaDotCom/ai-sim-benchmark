@@ -124,6 +124,32 @@ staining on uniforms of downed defenders. Still no gore: no dismemberment, no
 wound close-ups, no lingering suffering. (Published demo videos will be marked
 as sensitive content where platforms require it.)
 
+## Copyright guardrails
+
+The scene is an **homage, not a replica**. Binding for every run:
+
+- No film footage, film audio, dialogue lines, or on-screen text from the film.
+- No character names from the film and no actor likenesses — the protagonists
+  and defenders stay generic, unnamed figures.
+- The choreography is an original, compressed arrangement inspired by the
+  scene's motifs — not a shot-for-shot reconstruction of the film's cut.
+- All assets are generated within the run (already mandated); reference frames
+  from the film are never checked in and never given to agents as image input —
+  fidelity feedback reaches agents as text descriptions only.
+- Style elements (architecture, wardrobe style, color grade, slow-motion
+  gunfight motifs) are deliberately close to the reference; concrete protected
+  expression is not.
+
+## Violence limits (German law, § 131 StGB)
+
+The depiction of violence must stay within standard stylized action-film/game
+bounds and must never glorify, trivialize, or celebrate cruelty. Concretely,
+in addition to A4's limits (no gore, no dismemberment, no wound close-ups, no
+lingering suffering): no execution-style violence against defenseless or
+surrendering figures, no degrading treatment of the fallen, hits and falls stay
+brief and stylized, and the camera never dwells on a dying or dead figure. The
+tone remains choreographed action ballet, not cruelty.
+
 ---
 
 ## Agent environment for this scene
