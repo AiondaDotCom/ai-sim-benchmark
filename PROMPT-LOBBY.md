@@ -97,6 +97,27 @@ at least the low-poly character quality of an early-2000s game. Procedural
 generation and the Blender route are both acceptable ways to get there; the
 no-imported-assets rule is unchanged.
 
+**A3 (2026-08-23):** Set and wardrobe corrections derived from a frame-by-frame
+review of the original film scene (the review method is documented in
+INTERVENTIONS.md; the reference frames themselves stay private and are not part
+of this repository). These override the corresponding details of the frozen
+task text:
+
+- Columns, wall cladding, and the elevator surround are **dark grey-green
+  speckled granite** in large square tiles with visible recessed seams —
+  replacing "polished light-grey marble with subtle veining". Under fire the
+  dark granite bursts in showers of **pale chips and dust**, so damage reads
+  high-contrast light-on-dark; craters expose a pale rough substrate.
+- The floor is polished **dark green-veined marble** in large tiles, strongly
+  reflective.
+- The security checkpoint (desk, X-ray belt) is dark wood / black metal and
+  sits in a dim zone of the hall.
+- Phase-one guards wear **white shirts** with dark-green trousers, dark tie,
+  and peaked cap — replacing "light-blue uniform shirts".
+- The grade is a strong dark teal-green across the whole image with deep
+  shadows; during the destruction phase pale dust visibly hangs and drifts in
+  the air.
+
 ---
 
 ## Agent environment for this scene
