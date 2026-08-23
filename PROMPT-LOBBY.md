@@ -156,6 +156,19 @@ routed through the audio director as timed events so they pitch with the time
 scale, mixed under music and gunfire as texture, with the music ducking under
 the checkpoint line. Every line and voice id documented in ASSETS.md.
 
+**A11 (2026-08-23):** Character look-dev loop against the "Playmobil figures"
+verdict: build a dev-only turntable mode that renders each character type
+isolated under neutral studio light from fixed angles; diagnose the toy-look
+tells (oversized round head, no neck, mitten hands, constant-thickness limbs,
+missing garment geometry such as collars, lapels, cuffs, belts and boot soles,
+flat single-colour materials, featureless faces); generate fitting UV-mapped
+texture sheets per garment with the Codex CLI image tool (the mandated image
+source — normal/roughness maps may be derived from them by script); then
+iterate in closed rounds — render, inspect, list what still reads as a toy,
+fix, re-render — at least three rounds per character type, including a
+solid-black silhouette check. Finally re-verify the characters in the scene
+under the teal grade at 60 fps.
+
 **A5 (2026-08-23):** Ballistics special-effects package. Bullets must be
 modeled as real visible projectiles, not hitscan-only effects:
 
