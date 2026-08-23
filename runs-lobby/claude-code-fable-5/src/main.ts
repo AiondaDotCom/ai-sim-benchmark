@@ -7,7 +7,7 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 import { parseConfig } from './config';
 import { World } from './sim/world';
 import { FixedStepper } from './sim/stepper';
-import { DURATION, SOLDIERS, GUARDS, DEATHS } from './sim/timeline';
+import { DURATION, SOLDIERS, GUARDS } from './sim/timeline';
 import { loadMats } from './render/materials';
 import { Lobby } from './render/lobby';
 import { Character } from './render/characters';
@@ -20,8 +20,9 @@ const cfg = parseConfig(location.search);
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 0.95;
+// A9: tone mapping now happens in the post stack's grade pass, so bloom can
+// threshold on real HDR values instead of values already crushed into [0,1].
+renderer.toneMapping = THREE.NoToneMapping;
 // Paint the institutional tone immediately — the page must never flash dark.
 renderer.setClearColor(0x87948a, 1);
 document.body.appendChild(renderer.domElement);
@@ -64,6 +65,23 @@ scene.add(glowSoft);
 
 async function boot() {
   const mats = await loadMats();
+  // A9: thin cool rim so the near-black figures keep a silhouette against the
+  // near-black granite
+  const { applyCharacterRim } = await import('./render/rim');
+  applyCharacterRim(mats as unknown as Record<string, unknown>);
+
+  // A11: isolated character look-dev turntable — dev-only, never on the demo
+  // path. Short-circuits the whole scene build.
+  if (cfg.dev === 'char') {
+    const { buildDevChar } = await import('./render/devchar');
+    const draw = buildDevChar(renderer, mats, {
+      who: cfg.devWho, view: cfg.devView, pose: cfg.devPose,
+      silhouette: cfg.devSilhouette, spin: cfg.devSpin,
+    });
+    const devLoop = () => { draw(); requestAnimationFrame(devLoop); };
+    devLoop();
+    return;
+  }
   const pmrem = new THREE.PMREMGenerator(renderer);
   scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 
@@ -80,6 +98,11 @@ async function boot() {
   for (const s of SOLDIERS) chars.set(s.id, new Character('soldier', mats, scene));
 
   let world = new World(cfg.seed);
+  // B8: granite cladding over a substrate back, driven by the sim's damage
+  // grids. Built after the world so it can bind to those grids directly.
+  const { Cladding } = await import('./render/cladding');
+  let cladding = new Cladding(mats, world.slabs);
+  scene.add(cladding.group);
   // fast-forward to ?t= start time (events are consumed silently)
   while (world.t < cfg.startT) {
     world.step();
@@ -91,12 +114,15 @@ async function boot() {
     if (t > 9.7) chars.get('neo')!.coatOpen = 1;
     if (t >= 14.7 && t < 46.9) chars.get('neo')!.setGuns(true);
     if (t >= 15.0 && t < 46.9) chars.get('trin')!.setGuns(true);
-    for (const [id, deathT] of Object.entries(DEATHS)) {
-      if (t > deathT) chars.get(id)?.showBlood();
-    }
   }
   let stepper = new FixedStepper(world, cfg.timeScale);
   const director = new CameraDirector(window.innerWidth / window.innerHeight, cfg.camShake);
+  // ?freeze=1: hold one frame — no sim advance, no wall-clock camera motion
+  if (cfg.freeze) director.freezeRealT = 4;
+  if (cfg.devCam) director.overrideCam = cfg.devCam;
+
+  const { PostFX } = await import('./render/post');
+  const post = new PostFX(renderer, scene, director.camera, cfg.quality === 'low');
 
   const audio = new AudioEngine(cfg.seed, cfg.volume);
   void audio.init().then(() => audio.startMusic(world.t));
@@ -105,30 +131,29 @@ async function boot() {
     renderer.setSize(window.innerWidth, window.innerHeight);
     director.camera.aspect = window.innerWidth / window.innerHeight;
     director.camera.updateProjectionMatrix();
+    post.setSize(window.innerWidth, window.innerHeight);
   });
 
+  const muzzleTip = new THREE.Vector3();
   let last = performance.now();
   function frame(now: number) {
     const realDt = Math.min((now - last) / 1000, 0.1);
     last = now;
 
     const prevT = world.t;
-    stepper.advance(realDt);
+    if (!cfg.freeze) stepper.advance(realDt);
     const simDt = world.t - prevT;
     const events = world.drainEvents();
 
     // weapon visibility follows the choreography events
     for (const e of events) {
-      if (e.type === 'GUARD_DOWN') chars.get(e.id)?.showBlood();
       if (e.type === 'DRAW') chars.get(e.actor)?.setGuns(true);
-      if (e.type === 'GUN_DROP') {
-        // find who dropped: nearest protagonist
-        for (const id of ['neo', 'trin']) {
-          const a = world.actors.get(id)!;
-          const d = Math.hypot(a.pose.pos[0] - e.pos[0], a.pose.pos[2] - e.pos[2]);
-          if (d < 1.2) chars.get(id)?.setGuns(false);
-        }
-      }
+      // B6: the barrel lines up with the round that just left it
+      if (e.type === 'SHOT') chars.get(e.shooter)?.noteShot(e.dir, e.t);
+      // B10: only the protagonist who actually discarded is disarmed. The
+      // old proximity test would have disarmed a protagonist standing near a
+      // defender who went down.
+      if (e.type === 'GUN_DROP' && e.by) chars.get(e.by)?.setGuns(false);
     }
 
     audio.setTimeScale(stepper.scale());
@@ -136,11 +161,16 @@ async function boot() {
 
     for (const [id, ch] of chars) ch.update(world.actors.get(id)!, world.t);
     lobby.update(world.t);
-    effects.onEvents(events, 1 / Math.max(stepper.scale(), 0.05));
+    cladding.update();
+    effects.onEvents(events, 1 / Math.max(stepper.scale(), 0.05), (shooter, dir) => {
+      const ch = chars.get(shooter);
+      return ch && ch.muzzleTipFor(dir as [number, number, number], muzzleTip) ? muzzleTip : null;
+    });
     director.update(world, realDt);
-    effects.update(world, simDt, director.camera.position);
+    effects.update(world, simDt, director.camera.position, stepper.scale());
 
-    renderer.render(scene, director.camera);
+    post.update(realDt, stepper.scale());
+    post.render();
     // headless-verification aid (no UI): current sim time on the window
     (window as unknown as { __simT: number }).__simT = world.t;
 
@@ -148,6 +178,10 @@ async function boot() {
     if (world.t >= DURATION + 0.5 && cfg.loop) {
       world = new World(cfg.seed);
       stepper = new FixedStepper(world, cfg.timeScale);
+      // the loop starts from an undamaged hall, so rebind to the fresh grids
+      scene.remove(cladding.group);
+      cladding = new Cladding(mats, world.slabs);
+      scene.add(cladding.group);
       effects.reset();
       for (const ch of chars.values()) ch.reset();
       audio.startMusic(0);

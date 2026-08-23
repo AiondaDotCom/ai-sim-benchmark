@@ -35,8 +35,9 @@ export const CHECKPOINT = {
 export const ELEVATOR = {
   wallZ: -18,
   doors: [-3.2, 0, 3.2], // x centers of the three elevator doors
-  doorW: 1.9,
-  doorH: 2.7,
+  // tall portals per the film reference: taller than wide
+  doorW: 1.1,
+  doorH: 2.4,
 };
 
 export interface Surface {

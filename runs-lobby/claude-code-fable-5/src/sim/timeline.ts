@@ -54,10 +54,15 @@ interface SlowmoWindow { t0: number; t1: number; scale: number }
 export const SLOWMO: SlowmoWindow[] = [
   { t0: 15.06, t1: 15.3, scale: 0.05 }, // A5: muzzle-exit insert
   { t0: 19.2, t1: 20.05, scale: 0.18 },
-  { t0: 20.55, t1: 20.95, scale: 0.12 }, // A5: casing close-up insert
+  // A5/A7: casing close-up, held until the followed casing has bounced
+  // to rest on the marble (it settles at t=21.95).
+  { t0: 20.55, t1: 21.98, scale: 0.28 },
   { t0: 23.45, t1: 24.15, scale: 0.12 }, // A5: bullet-dodge set piece
   { t0: 25.35, t1: 26.25, scale: 0.2 },
   { t0: 31.5, t1: 32.3, scale: 0.2 },
+  // A7: bullet-cam on the last kill. The round crosses 4.5 m in 50 ms of
+  // sim time, so the window is scaled to give it ~3 s of screen time.
+  { t0: 39.69, t1: 39.762, scale: 0.022 },
 ];
 const EASE = 0.18;
 
@@ -76,9 +81,21 @@ export function timeScaleAt(t: number): number {
 
 // ------------------------------------------------------------------ cues ---
 
-export interface Cue { t: number; type: string; actor?: string; pos?: V3 }
+export interface Cue { t: number; type: string; actor?: string; pos?: V3; line?: string }
 export const CUES: Cue[] = [
   { t: 8.0, type: 'BEEP' },
+  // ---- A10 voice lines. All original generic security phrasing; each is
+  // placed so it lands inside the beat it belongs to (see VO_LINES below).
+  { t: 8.25, type: 'VO', line: 'vo_checkpoint_1' },
+  { t: 10.5, type: 'VO', line: 'vo_checkpoint_2' },
+  { t: 12.0, type: 'VO', line: 'vo_hands' },
+  { t: 13.55, type: 'VO', line: 'vo_radio_backup' },
+  { t: 15.2, type: 'VO', line: 'vo_go' },
+  { t: 16.9, type: 'VO', line: 'vo_takecover' },
+  { t: 18.5, type: 'VO', line: 'vo_leftflank' },
+  { t: 24.6, type: 'VO', line: 'vo_reloading' },
+  { t: 27.6, type: 'VO', line: 'vo_column' },
+  { t: 41.8, type: 'VO', line: 'vo_lobbypost' },
   { t: 9.7, type: 'COAT' },
   { t: 12.4, type: 'STRIKE', actor: 'neo' },
   { t: 12.65, type: 'STRIKE', actor: 'neo' },
@@ -89,13 +106,99 @@ export const CUES: Cue[] = [
   { t: 14.7, type: 'DRAW', actor: 'neo' },
   { t: 15.0, type: 'DRAW', actor: 'trin' },
   { t: 16.6, type: 'ALARM' },
+  // B10: the pair discard emptied guns repeatedly across the advance, not
+  // three times in sixty seconds. Each discard sits in a lull in THAT
+  // character's fire and is followed by a fresh draw.
+  { t: 21.35, type: 'GUN_DROP', actor: 'neo' },
+  { t: 21.75, type: 'DRAW', actor: 'neo' },
+  { t: 22.2, type: 'GUN_DROP', actor: 'trin' },
+  { t: 22.6, type: 'DRAW', actor: 'trin' },
+  { t: 25.6, type: 'GUN_DROP', actor: 'neo' },
+  { t: 26.0, type: 'DRAW', actor: 'neo' },
+  { t: 27.0, type: 'GUN_DROP', actor: 'trin' },
+  { t: 27.4, type: 'DRAW', actor: 'trin' },
+  { t: 28.4, type: 'GUN_DROP', actor: 'neo' },
+  { t: 28.8, type: 'DRAW', actor: 'neo' },
   { t: 30.05, type: 'GUN_DROP', actor: 'neo' },
   { t: 30.25, type: 'GUN_DROP', actor: 'neo' },
   { t: 30.6, type: 'DRAW', actor: 'neo' },
+  { t: 31.5, type: 'GUN_DROP', actor: 'trin' },
+  { t: 31.9, type: 'DRAW', actor: 'trin' },
   { t: 33.15, type: 'GUN_DROP', actor: 'trin' },
   { t: 33.6, type: 'DRAW', actor: 'trin' },
+  { t: 35.4, type: 'GUN_DROP', actor: 'neo' },
+  { t: 35.8, type: 'DRAW', actor: 'neo' },
+  { t: 37.2, type: 'GUN_DROP', actor: 'trin' },
+  { t: 37.6, type: 'DRAW', actor: 'trin' },
+  { t: 38.6, type: 'GUN_DROP', actor: 'neo' },
+  { t: 39.0, type: 'DRAW', actor: 'neo' },
   { t: 46.6, type: 'HOLSTER' },
   { t: 51.5, type: 'ELEVATOR' },
+  // The cue loop walks this list with a monotonic index, so it MUST be sorted
+  // by time. Sorting here rather than relying on the literal being in order:
+  // inserting the A10 voice lines out of order silently stopped every later
+  // cue — the coat reveal, the draws, the gun drops, the elevator.
+].sort((a, b) => a.t - b.t);
+
+/**
+ * B7: the metal detector's red alarm lamp. Its pulse train is the pulse train
+ * of the generated alarm asset (7 beeps, 148 ms on, 294 ms apart — measured
+ * from public/assets/sfx/beep.mp3, see ASSETS.md), so lamp and sound cannot
+ * drift apart. Starts on the BEEP cue at t=8.0.
+ */
+export const DETECTOR_ALARM = {
+  t0: 8.0,
+  period: 0.294,
+  on: 0.148,
+  pulses: 7,
+  /** after the beeps, a slow ember pulse carries the red into the eruption */
+  emberUntil: 13.5,
+  emberPeriod: 1.1,
+};
+
+/** Detector alarm lamp brightness 0..1 at scene time t. */
+export function detectorLampAt(t: number): number {
+  const a = DETECTOR_ALARM;
+  const dt = t - a.t0;
+  if (dt < 0) return 0;
+  const k = Math.floor(dt / a.period);
+  if (k < a.pulses) {
+    const within = dt - k * a.period;
+    if (within > a.on) return 0;
+    // hard attack, slight decay across the pulse
+    return 1 - 0.3 * (within / a.on);
+  }
+  if (t >= a.emberUntil) return 0;
+  // slow, dim pulse holding the red through the eruption
+  const phase = ((t - (a.t0 + a.pulses * a.period)) % a.emberPeriod) / a.emberPeriod;
+  const fade = 1 - smooth(a.emberUntil - 1.2, a.emberUntil, t);
+  return 0.34 * fade * Math.max(0, 1 - Math.abs(phase - 0.15) * 5);
+}
+
+/**
+ * A10: every spoken line, with the beat window it has to land inside. The
+ * windows are asserted in tests so a later timing change cannot silently move
+ * a line off its beat.
+ */
+export const VO_LINES: {
+  line: string; t: number; beat: [number, number]; radio: boolean; duck: number;
+}[] = [
+  // checkpoint: he must still be standing in the detector frame
+  { line: 'vo_checkpoint_1', t: 8.25, beat: [8.0, 11.6], radio: false, duck: 0.45 },
+  { line: 'vo_checkpoint_2', t: 10.5, beat: [8.0, 11.6], radio: false, duck: 0.35 },
+  // eruption
+  { line: 'vo_hands', t: 12.0, beat: [11.6, 14.0], radio: false, duck: 0 },
+  // radio call on the alarm
+  { line: 'vo_radio_backup', t: 13.55, beat: [13.5, 18.0], radio: true, duck: 0.2 },
+  // reinforcements storming in (first soldier enters at 14.0)
+  { line: 'vo_go', t: 15.2, beat: [14.0, 19.0], radio: false, duck: 0 },
+  { line: 'vo_takecover', t: 16.9, beat: [14.0, 19.0], radio: false, duck: 0 },
+  { line: 'vo_leftflank', t: 18.5, beat: [14.0, 19.0], radio: false, duck: 0 },
+  // mid-fight
+  { line: 'vo_reloading', t: 24.6, beat: [19.0, 39.8], radio: false, duck: 0 },
+  { line: 'vo_column', t: 27.6, beat: [19.0, 39.8], radio: false, duck: 0 },
+  // the unanswered call in the quiet after the last soldier drops
+  { line: 'vo_lobbypost', t: 41.8, beat: [40.2, 46.6], radio: true, duck: 0.3 },
 ];
 
 /** Elevator center door open fraction 0..1. */
@@ -126,12 +229,16 @@ function walkPose(
   action = 'walk',
 ): Pose {
   const k = seg(t, t0, t1);
-  const x = lerp(from[0], to[0], k);
-  const z = lerp(from[1], to[1], k);
+  // A9: ease in and out of every walk leg. Linear legs started and stopped
+  // dead, which is the single most animatronic thing in the whole scene.
+  const e = easeInOut(k);
+  const x = lerp(from[0], to[0], e);
+  const z = lerp(from[1], to[1], e);
   const dx = to[0] - from[0];
   const dz = to[1] - from[1];
   const dist = Math.hypot(dx, dz);
-  const speed = dist / (t1 - t0);
+  // instantaneous speed of the eased motion, so the stride cycle matches
+  const speed = (dist / (t1 - t0)) * easeInOutD(k);
   return {
     pos: [x, 0, z],
     yaw: Math.atan2(dx, dz),
@@ -140,6 +247,39 @@ function walkPose(
     speed,
   };
 }
+
+// ------------------------------------------------- animation shaping (A9) ---
+// All pure functions of the choreography clock, so the replay hash is
+// unaffected and the beat times below are untouched.
+
+/** Classic ease-in-out; velocity starts and ends at zero. */
+const easeInOut = (p: number): number => {
+  const k = clamp(p, 0, 1);
+  return k * k * (3 - 2 * k);
+};
+/** d/dp of easeInOut, so reported speed matches the eased motion. */
+const easeInOutD = (p: number): number => {
+  const k = clamp(p, 0, 1);
+  return 6 * k * (1 - k);
+};
+/**
+ * Anticipation + overshoot: dips slightly below 0 before the move starts and
+ * past 1 before settling back. Poses that read `phase` as an angle or a blend
+ * get a real counter-move and a settle out of it for free.
+ */
+const antic = (p: number, back = 0.16): number => {
+  const k = clamp(p, 0, 1);
+  // one half-sine of counter-motion over the first quarter of the move...
+  const pre = Math.sin(Math.PI * clamp(k / 0.25, 0, 1));
+  // ...and a smaller one past the end over the last quarter
+  const post = Math.sin(Math.PI * clamp((k - 0.75) / 0.25, 0, 1));
+  return k - back * pre + back * 0.62 * post;
+};
+/** Damped oscillation used to settle a limb after an explosive move. */
+const settle = (p: number, freq = 3.2, damp = 5.5): number => {
+  const k = clamp(p, 0, 1);
+  return Math.exp(-damp * k) * Math.sin(freq * Math.PI * k);
+};
 
 const still = (x: number, z: number, yaw: number, action: string, phase = 0): Pose => ({
   pos: [x, 0, z], yaw, action, phase, speed: 0,
@@ -174,14 +314,17 @@ export function neoPose(t: number): Pose {
   if (t < 18.4) return walkPose(t, 15.0, 18.4, [0.2, 8.8], [-1.3, 4.6], 'shootAdvance');
   if (t < 18.95) return still(-1.5, 4.5, FACE_ELEV, 'crouchFire', seg(t, 18.4, 18.95));
   if (t < 20.25) {
-    // Cartwheel across the open floor, dual-wield firing.
+    // Cartwheel across the open floor, dual-wield firing. The phase is shaped
+    // so the body counter-rotates a little before it commits and overshoots
+    // past the landing before settling (A9).
     const k = seg(t, 18.95, 20.25);
+    const a = antic(k, 0.16);
     return {
-      pos: [lerp(-1.5, 1.7, k), 0, lerp(4.5, 3.9, k)],
+      pos: [lerp(-1.5, 1.7, easeInOut(k)), 0, lerp(4.5, 3.9, easeInOut(k))],
       yaw: FACE_ELEV,
       action: 'cartwheel',
-      phase: k,
-      speed: 2.4,
+      phase: a,
+      speed: 2.4 * easeInOutD(k),
     };
   }
   if (t < 21.1) return still(1.7, 3.9, FACE_ELEV, 'crouchFire', seg(t, 20.25, 21.1));
@@ -199,7 +342,9 @@ export function neoPose(t: number): Pose {
       pos: [lerp(2.52, DODGE_POS[0], mix), 0, lerp(2.75, DODGE_POS[1], mix)],
       yaw: FACE_ELEV,
       action: 'dodge',
-      phase: k,
+      // a touch of counter-lean before he drops back, and a damped settle as
+      // he comes upright again (A9)
+      phase: k + 0.05 * settle(k, 2.4, 6.5),
       speed: 0,
     };
   }
@@ -221,9 +366,9 @@ export function neoPose(t: number): Pose {
   if (t < 47.4) return still(0.8, -5.6, FACE_ELEV, 'holster', seg(t, 46.4, 47.4));
   if (t < 51.9) return walkPose(t, 47.4, 51.9, [0.8, -5.6], [0.55, -16.8]);
   if (t < 52.6) return still(0.55, -16.8, FACE_ELEV, 'idle');
-  if (t < 53.8) return walkPose(t, 52.6, 53.8, [0.55, -16.8], [0.5, -18.75]);
-  if (t < 54.4) return still(0.5, -18.75, lerp(FACE_ELEV, 0, seg(t, 53.8, 54.4)), 'idle');
-  return still(0.5, -18.75, FACE_DOOR, 'idle');
+  if (t < 53.8) return walkPose(t, 52.6, 53.8, [0.55, -16.8], [0.26, -18.7]);
+  if (t < 54.4) return still(0.26, -18.7, lerp(FACE_ELEV, 0, seg(t, 53.8, 54.4)), 'idle');
+  return still(0.26, -18.7, FACE_DOOR, 'idle');
 }
 
 export function trinPose(t: number): Pose {
@@ -256,11 +401,13 @@ export function trinPose(t: number): Pose {
   }
   if (t < 24.9) return walkPose(t, 23.4, 24.9, [-2.5, 2.9], [-6.9, 2.3]);
   if (t < 26.75) {
-    // Wall run along the left wall (x=-8): elevated, tilted, firing mid-run.
+    // B3 wall run along the left wall (x=-8): body fully horizontal, boots
+    // on the wall surface (root = foot contact point AT the wall), firing
+    // across the hall mid-run.
     const k = seg(t, 24.9, 26.75);
     const h = Math.sin(Math.PI * clamp(k * 1.15, 0, 1)) * 1.5;
     return {
-      pos: [-7.25, Math.max(0, h), lerp(2.2, -1.4, k)],
+      pos: [-7.92, Math.max(0, h), lerp(2.2, -1.4, k)],
       yaw: FACE_ELEV,
       action: 'wallrun',
       phase: k,
@@ -281,9 +428,9 @@ export function trinPose(t: number): Pose {
   if (t < 47.4) return still(-0.7, -5.8, FACE_ELEV, 'holster', seg(t, 46.4, 47.4));
   if (t < 51.9) return walkPose(t, 47.4, 51.9, [-0.7, -5.8], [-0.55, -16.8]);
   if (t < 52.6) return still(-0.55, -16.8, FACE_ELEV, 'idle');
-  if (t < 53.8) return walkPose(t, 52.6, 53.8, [-0.55, -16.8], [-0.4, -18.75]);
-  if (t < 54.4) return still(-0.4, -18.75, lerp(FACE_ELEV, 0, seg(t, 53.8, 54.4)), 'idle');
-  return still(-0.4, -18.75, FACE_DOOR, 'idle');
+  if (t < 53.8) return walkPose(t, 52.6, 53.8, [-0.55, -16.8], [-0.26, -18.7]);
+  if (t < 54.4) return still(-0.26, -18.7, lerp(FACE_ELEV, 0, seg(t, 53.8, 54.4)), 'idle');
+  return still(-0.26, -18.7, FACE_DOOR, 'idle');
 }
 
 // ------------------------------------------------------------- defenders ---
@@ -350,6 +497,12 @@ function soldierLivePose(def: SoldierDef, t: number): Pose {
   const arriveT = def.enterT + 2.1;
   if (t < def.enterT) return still(def.door[0], def.door[1], FACE_DOOR, 'hidden');
   if (t < arriveT) return walkPose(t, def.enterT, arriveT, def.door, def.cover, 'run');
+  // A7: the last soldier breaks cover for a final assault — this also gives
+  // the killing shot (and its bullet-cam) a clear line of sight.
+  if (def.id === 's7' && t >= 38.6) {
+    if (t < 39.3) return walkPose(t, 38.6, 39.3, def.cover, [3.2, -9.2], 'run');
+    return { pos: [3.2, 0, -9.2], yaw: FACE_DOOR, action: 'cover', phase: 1, speed: 0 };
+  }
   // In cover, crouched; lean out around burst times.
   let lean = 0;
   for (const b of soldierBursts(def)) {
@@ -431,6 +584,10 @@ export const SHOT_PLAN: PlannedShot[] = buildShotPlan();
  *  of near-miss rounds that carry visible air wakes. */
 export const DODGE_POS: [number, number] = [1.35, 3.3];
 export const DODGE_SHOT_TIMES = [23.42, 23.58, 23.76, 23.94];
+
+/** B3: dense return-fire volley that chases the wall run — one round every
+ *  0.11 s through the slow-mo window, each landing just behind/below her. */
+export const WALLCHASE_TIMES: number[] = Array.from({ length: 9 }, (_, i) => 25.32 + i * 0.11);
 
 /** Extra debris trickling down from damaged surfaces during the wind-down. */
 export const SETTLE_TIMES = [40.8, 41.7, 42.9, 44.2];

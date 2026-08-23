@@ -9,6 +9,7 @@
  * offset (explicitly allowed by the spec; no UI involved).
  */
 import { AudioDirector } from './director';
+import { VO_LINES } from '../sim/timeline';
 import type { SimEvent } from '../sim/events';
 
 const SFX_NAMES = [
@@ -38,6 +39,7 @@ export class AudioEngine {
   private timeScale = 1;
   private unlocked = false;
   private musicStartedAtSimT = -1;
+  private duckUntil = 0;
 
   constructor(seed: number, private volume: number) {
     this.director = new AudioDirector(seed);
@@ -67,6 +69,13 @@ export class AudioEngine {
       ...SFX_NAMES.map(async (n) => {
         const b = await load(`${base}assets/sfx/${n}.mp3`);
         if (b) this.buffers.set(n, b);
+      }),
+      // A10: spoken lines live alongside the effects and go through the same
+      // voice path, so they pitch and stretch with the time scale like
+      // everything else.
+      ...VO_LINES.map(async (v) => {
+        const b = await load(`${base}assets/vo/${v.line}.mp3`);
+        if (b) this.buffers.set(v.line, b);
       }),
       (async () => {
         this.musicBuffer = await load(`${base}assets/music/music.mp3`);
@@ -124,6 +133,25 @@ export class AudioEngine {
     }
   }
 
+  /**
+   * A10: pull the music down under a spoken line and let it back up when the
+   * line ends, so the checkpoint dialogue is intelligible without muting the
+   * score. Duration is in real seconds, so a line inside a slow-motion window
+   * keeps the music down for as long as the stretched line actually lasts.
+   */
+  private duckMusic(amount: number, realDuration: number) {
+    if (!this.ctx || !this.musicGain) return;
+    const g = this.musicGain.gain;
+    const full = this.volume * 0.9;
+    const t = this.ctx.currentTime;
+    const until = t + realDuration + 0.35;
+    if (until <= this.duckUntil) return;
+    this.duckUntil = until;
+    g.cancelScheduledValues(t);
+    g.setTargetAtTime(full * (1 - amount), t, 0.09);
+    g.setTargetAtTime(full, until, 0.28);
+  }
+
   /** Feed simulation events; plays the mapped samples. */
   handleEvents(events: SimEvent[]) {
     if (!this.ctx || !this.unlocked || !this.sfxGain) {
@@ -142,6 +170,7 @@ export class AudioEngine {
         src.connect(gain);
         gain.connect(this.sfxGain);
         src.start();
+        if (cmd.duck && this.musicGain) this.duckMusic(cmd.duck, buf.duration / Math.max(this.timeScale, 0.05));
         const voice: Voice = { src, baseRate: cmd.rate };
         this.voices.push(voice);
         src.onended = () => {

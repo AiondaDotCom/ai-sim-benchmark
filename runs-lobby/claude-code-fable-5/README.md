@@ -23,6 +23,10 @@ http://localhost:5173). `./start.sh --preview` serves the production build.
 | `camShake` | 1 | Handheld-shake intensity during the battle. |
 | `loop` | 1 | `0` disables looping after the final shot. |
 | `t` | 0 | Start offset in scene seconds (fast-forwards the simulation on load; used for verification screenshots). |
+| `quality` | high | `low` disables SSAO and motion blur in the post-processing stack (bloom and the grade stay). |
+| `cam` | — | Dev-only camera override, `x,y,z,lx,ly,lz`. Frames a verification shot the cut list does not contain (used to photograph a shot-up column in silhouette). No effect on normal playback. |
+| `hot` | 0 | Dev diagnostic: renders pre-grade HDR luminance ÷ 8 as greyscale, to locate an over-bright surface. |
+| `freeze` | 0 | `1` holds a single frame at `t`: the simulation does not advance and the camera's wall-clock terms (per-shot ramps, handheld shake) are pinned, so a screenshot is exactly reproducible. Verification aid only — no effect on normal playback. |
 
 Example: `http://localhost:5173/?seed=7&timeScale=0.5&volume=1`
 
@@ -113,10 +117,9 @@ including the music, which keeps the music's 12.0 s drop locked to sim time.
 
 ### Destruction persistence
 
-Defender hits show a brief stylized dark-red impact mist; downed defenders
-keep persistent uniform stains and leave a floor stain (A4) — stylized, no
-gore, and the camera never dwells on the fallen. The damage map
-(`world.decals`), debris, casings, blood stains, and dropped guns only ever
+Hits are fully stylized with no blood (A6): defenders crumple, drop, or slide
+down columns, and the camera never dwells on the fallen. The damage map
+(`world.decals`), debris, casings, and dropped guns only ever
 grow; nothing despawns during the sequence (tested: counts are monotone, early
 decals still present and unchanged at the end). The final pan shows the
 accumulated wreckage: ~350 impact decals, ~1500 debris chips, ~370 casings,

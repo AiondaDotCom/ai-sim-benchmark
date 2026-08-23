@@ -9,7 +9,7 @@ Reproduction scripts: `scripts/gen-textures.sh` (Codex CLI), `scripts/gen-sfx.sh
 AceDataCloud, token via `SUNO_TOKEN` env var). No credentials are stored in the
 repository.
 
-## Textures — `public/assets/textures/` (16 files)
+## Textures — `public/assets/textures/` (15 files)
 
 Tool: **Codex CLI image generation** (`codex exec … "Generate an image: <prompt>"`).
 
@@ -35,7 +35,9 @@ lists the prompts that produced the current files.
 | `granite_tile.png` (A3) | one single large square tile of dark grey-green speckled salt-and-pepper granite filling the whole image, dense fine black, white and grey speckles on a dark green-grey base, a thin darker recessed seam border along all four edges of the tile, polished institutional stone, DARK overall tone, photorealistic, flat frontal view, even diffuse lighting, tiles seamlessly when repeated, 1024x1024 |
 | `floor_green.png` (A3) | seamless tileable texture of polished dark green marble, deep forest-green stone with elegant pale white-green veining, large square floor tiles with thin seams, glossy reflective surface, dark overall, photorealistic, flat frontal view, even lighting, 1024x1024 |
 | `shirt_white.png` (A3) | seamless tileable close-up texture of white cotton uniform shirt fabric with clearly visible woven thread structure and subtle soft wrinkles, slightly warm off-white, photorealistic, even lighting, 1024x1024 |
-| `blood_stain.png` (A4) | an irregular dark red blood splatter stain seen from directly above, deep desaturated dark crimson on a pure black background, organic splatter shape with a denser center and thin spray droplets at the edges, matte, stylized film prop blood, centered, 1024x1024 |
+
+(A `blood_stain.png` was generated for the A4 blood pass and removed again with
+A6 — the demo contains no blood.)
 
 A3 set change: the hall now uses `granite_tile.png` (columns, walls, elevator
 surrounds) and `floor_green.png`; guards wear `shirt_white.png`. The earlier
@@ -70,7 +72,7 @@ per category are selected per event by the seeded RNG so repeats differ.
 | `debris_1.mp3` | Handful of rock chips and dust falling, clattering lightly on marble tiles |
 | `footstep_0.mp3` | Single hard boot footstep on a polished marble floor with a slight echo |
 | `footstep_1.mp3` | One firm leather boot heel step on stone floor, short clean echo |
-| `beep.mp3` | Loud electronic metal detector alert beep, two harsh insistent tones |
+| `beep.mp3` (B4, regenerated) | Walk-through metal-detector alarm. Built by `scripts/build-beep-b4.py` from the best of 7 ElevenLabs candidates (`scripts/gen-beep-b4.sh`): one clean generated beep laid out on an exact 3.4 Hz grid. Verified with `scripts/analyze-beep.py` — 7 pulses of 148 ms, gaps 294 ms ±0 ms, fundamental 1085 Hz (spread 3 Hz across pulses), 2.06 s. The raw takes had the right timbre but never a regular cadence (merged/dropped beeps, 5–11 beeps/s), so the rhythm is a deterministic edit of generated audio. Supersedes the earlier two-tone 2.1 kHz version. |
 | `alarm.mp3` | Government building security alarm, urgent repeating electric bell ringing |
 | `grunt_m0.mp3` | Short stylized male action-movie pain grunt, quick 'ugh', no gore |
 | `grunt_m1.mp3` | A quick male fighter's grunt of impact, punchy 'hah' exhale, stylized |
@@ -112,3 +114,93 @@ generation calls, two variants each (all four source tracks checked in):
 ## Sizes
 
 Textures ≈ 17 MB PNG, SFX ≈ 0.6 MB MP3, music ≈ 16 MB MP3 (sources + final).
+
+## A11 — character look-dev textures (Codex CLI) + derived relief maps
+
+All surface art below was generated with the Codex CLI image tool
+(`scripts/gen-textures-a11.sh`), the mandated image source for this benchmark.
+Prompts are reproduced verbatim; each is prefixed by the harness with
+"Generate an image: " and suffixed with the save instruction.
+
+| File | Used for | Codex prompt (verbatim) |
+|---|---|---|
+| `a11_coat_twill.png` | the man's coat | a seamless tileable flat-lit texture of black heavy cotton-gabardine trench coat fabric, fine diagonal twill weave clearly visible, subtle slate-grey sheen on the raised diagonal ribs, a few faint pressed fold creases, very slightly lighter worn abrasion along the weave, photographic material study, no seams at the tile edges, no logo, no text, top-down flat view |
+| `a11_shirt_weave.png` | guard uniform shirts | a seamless tileable flat-lit texture of crisp white cotton uniform shirt fabric, fine plain-weave poplin thread grid clearly visible, faint cool-grey shadowing in the weave, a couple of soft pressed creases, clean and slightly starched, photographic material study, no seams at the tile edges, no logo, no text, top-down flat view |
+| `a11_latex_sheen.png` | the woman's suit | a seamless tileable flat-lit texture of black latex, glossy rubber surface with fine stretch crease lines and soft elongated specular streaks, subtle grain, deep black with cool highlights, photographic material study, no seams at the tile edges, no text, top-down flat view |
+| `a11_skin_pores.png` | skin (relief + roughness only) | a seamless tileable flat-lit texture of human facial skin, neutral light tan, very fine pore detail and subtle mottled tonal variation, slight redness variation, matte, no hair, no features, photographic material study, no seams at the tile edges, top-down flat view |
+| `a11_tactical_weave.png` | soldier fatigues | a seamless tileable flat-lit texture of black tactical nylon cordura fabric, tight ballistic basket weave clearly visible, matte with a faint sheen on the weave crowns, slight dusty wear, photographic material study, no seams at the tile edges, no logo, no text, top-down flat view |
+| `a11_boot_leather.png` | boots, gloves, black leather | a seamless tileable flat-lit texture of scuffed black leather combat boot hide, fine natural grain, soft creasing, subtle lighter scuffs and polish highlights, photographic material study, no seams at the tile edges, no text, top-down flat view |
+
+Note on the skin sheet: it drives **relief and roughness only**, never albedo.
+Multiplying a tan map by a tan base colour turned every face orange, so the
+skin tone stays a material colour and the sheet supplies pore break-up.
+
+### Derived normal + roughness maps (`*_n.png`, `*_r.png`)
+
+These are **derived, not separately generated**. `scripts/derive-maps.py`
+converts each albedo to greyscale, takes a wrap-around Sobel gradient into a
+tangent-space normal map, and maps inverted contrast-stretched luminance into a
+per-material roughness window. Both are approximations of relief inferred from
+the albedo, not measured surface data. Per-material normal strength and
+roughness range live in the `TARGETS` table in that script, tuned so granite
+reads coarse and speckled, fabric reads woven, and polished stone takes relief
+only in its veining. Regenerate with:
+
+    ./.venv-analysis/bin/python scripts/derive-maps.py
+
+Materials covered: granite_tile, floor_green, marble_column, wall_panel,
+coat_fabric, shirt_white, latex_black, brushed_metal, brass, fabric_blue, and
+all six A11 sheets above.
+
+
+## A10 — English voice lines (ElevenLabs text-to-speech)
+
+Generated by `scripts/gen-vo-a10.sh` (key from `$ELEVENLABS_KEY`, never
+committed), model `eleven_multilingual_v2`, stability 0.42 / similarity 0.8 /
+style 0.35. Files live in `public/assets/vo/` and are checked in, so the demo
+stays offline.
+
+**Copyright:** every line is original, generic security/police phrasing. No
+dialogue, phrasing or character name from any film is used.
+
+| File | Role / voice | Voice id | Beat | Exact TTS text |
+|---|---|---|---|---|
+| `vo_checkpoint_1.mp3` | mature guard — Eric | `cjVigY5qzO86Huf0OWal` | 8.25 s, in the detector frame | Sir, please remove any metal items and step back through. |
+| `vo_checkpoint_2.mp3` | mature guard — Eric | `cjVigY5qzO86Huf0OWal` | 10.5 s, tensing before the reveal | Sir. I need you to step back. Now. |
+| `vo_hands.mp3` | younger guard — Will | `bIHbv24MWmeRgasZH58o` | 12.0 s, the eruption | Hands where I can see them! |
+| `vo_radio_backup.mp3` | guard on the radio — Eric | `cjVigY5qzO86Huf0OWal` | 13.55 s, on the alarm | Control, lobby post. Armed intruders in the main hall, requesting immediate backup. |
+| `vo_go.mp3` | squad leader — Adam | `pNInz6obpgDQGcFmaJgB` | 15.2 s, storm-in | Go, go, go! |
+| `vo_takecover.mp3` | squad leader — Adam | `pNInz6obpgDQGcFmaJgB` | 16.9 s | Take cover! |
+| `vo_leftflank.mp3` | squad leader — Adam | `pNInz6obpgDQGcFmaJgB` | 18.5 s | Moving up, left flank! |
+| `vo_reloading.mp3` | trooper — Harry | `SOYHLrjzK2X1ezoPC6cr` | 24.6 s, mid-fight | Reloading! |
+| `vo_column.mp3` | trooper — Harry | `SOYHLrjzK2X1ezoPC6cr` | 27.6 s, mid-fight | He's behind the column! |
+| `vo_lobbypost.mp3` | dispatcher on the radio — Daniel | `onwK4e9ZLuTAKqWW03F9` | 41.8 s, unanswered in the wind-down | Lobby post, report. Lobby post, do you copy? |
+
+### Radio treatment
+
+The two radio lines are post-processed in ffmpeg by the same script: 300 Hz
+high-pass and 3 kHz low-pass, `acompressor` at 8:1 with a hard limiter for the
+light distortion, and a short pink-noise squelch burst concatenated at each
+end. Verified with `scripts/analyze-vo.py`: 90.4 % and 95.3 % of their energy
+sits inside the 300–3000 Hz band, against 22–35 % for the plain lines.
+
+### Mix
+
+Lines are routed through the normal event → sound path, so they pitch and
+stretch with the time scale like every other sound. They sit under the music
+and gunfire; the two checkpoint lines duck the music (0.45 / 0.35) so the
+dialogue stays intelligible, and the radio lines duck it slightly (0.2 / 0.3).
+
+
+## B8 — substrate revealed behind the cladding (Codex CLI)
+
+| File | Used for | Codex prompt (verbatim) |
+|---|---|---|
+| `b8_substrate.png` | the rough core exposed when granite cladding is shot off walls and columns | a seamless tileable flat-lit texture of the rough broken concrete backing wall revealed behind stripped-off stone cladding, pale chalky cool-grey cement with coarse exposed aggregate gravel, crumbly fractured surface, dry dusty matte finish with no polish and no shine at all, small pits and shallow chips, faint remnants of grey tile adhesive mortar in patches, construction substrate, photographic material study, no seams at the tile edges, no text, top-down flat view |
+
+Generated by `scripts/gen-textures-b8.sh`. Normal and roughness maps are
+derived from it by `scripts/derive-maps.py` at a high normal strength (3.0) and
+a rough window (0.72–1.00), so the exposed core reads coarse and completely
+matte against the polished granite. It replaces the earlier `substrate.png`,
+which was a mid-grey aggregate that read as a darker granite rather than as a
+different material.

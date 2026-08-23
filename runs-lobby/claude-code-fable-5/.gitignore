@@ -1,6 +1,10 @@
-node_modules/
+.a8-verify/
+.DS_Store
+.venv-analysis/
+*.local
 dist/
+node_modules/
+scripts/.vo-tmp/
+scripts/beep-candidates/
 scripts/devserver.log
 scripts/preview.log
-*.local
-.DS_Store

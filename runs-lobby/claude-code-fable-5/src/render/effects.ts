@@ -34,18 +34,15 @@ export class Effects {
   private flashLight: THREE.PointLight;
   private tracerMesh: THREE.InstancedMesh;
   private headMesh!: THREE.InstancedMesh;
+  private haloPool: THREE.Sprite[] = [];
   private tracerLights: THREE.PointLight[] = [];
+  private yAxis = new THREE.Vector3(0, 1, 0);
+  private dirV = new THREE.Vector3();
+  private alignQ = new THREE.Quaternion();
   private ringPool: { mesh: THREE.Mesh; born: number }[] = [];
   private wakeSpawnDist = new Map<object, number>();
   private rng: Rng;
   private dummy = new THREE.Object3D();
-  // A4: brief stylized blood mist + persistent floor stains
-  private blood: DustP[] = [];
-  private bloodGeo: THREE.BufferGeometry;
-  private bloodPos: Float32Array;
-  private bloodPts: THREE.Points;
-  private stainCount = 0;
-  private stainGroup = new THREE.Group();
 
   constructor(private mats: Mats, seed: number) {
     this.rng = mulberry32(seed ^ 0x51ed270b);
@@ -91,24 +88,6 @@ export class Effects {
     this.dustPts.frustumCulled = false;
     this.group.add(this.dustPts);
 
-    // A4 blood mist points (dark desaturated red, reads against the teal)
-    this.bloodPos = new Float32Array(600 * 3);
-    this.bloodGeo = new THREE.BufferGeometry();
-    this.bloodGeo.setAttribute('position', new THREE.BufferAttribute(this.bloodPos, 3));
-    const bloodMat = new THREE.PointsMaterial({
-      map: mats.textures.dust,
-      color: 0x6e1a15,
-      size: 0.22,
-      transparent: true,
-      opacity: 0.55,
-      depthWrite: false,
-      sizeAttenuation: true,
-    });
-    this.bloodPts = new THREE.Points(this.bloodGeo, bloodMat);
-    this.bloodPts.frustumCulled = false;
-    this.group.add(this.bloodPts);
-    this.group.add(this.stainGroup);
-
     // muzzle flashes
     const flashMat = new THREE.SpriteMaterial({
       map: mats.textures.dust,
@@ -128,23 +107,66 @@ export class Effects {
     this.group.add(this.flashLight);
 
     // tracers: additive light trail + hot glowing head (A5)
-    const tracerGeo = new THREE.BoxGeometry(0.016, 0.016, 1);
+    // B5: round, tapered trail that fades to nothing at the tail. Additive
+    // blending turns the baked vertex-colour ramp into an opacity ramp, so
+    // the streak reads as glowing air rather than a flat white plank.
+    const tracerGeo = new THREE.CylinderGeometry(0.014, 0.003, 1, 8, 1, true);
+    tracerGeo.rotateX(Math.PI / 2);
+    {
+      const pos = tracerGeo.attributes.position;
+      const col = new Float32Array(pos.count * 3);
+      for (let i = 0; i < pos.count; i++) {
+        const k = Math.max(0, Math.min(1, pos.getZ(i) + 0.5)); // 0 tail .. 1 head
+        const f = k * k;
+        col[i * 3] = f; col[i * 3 + 1] = f * 0.88; col[i * 3 + 2] = f * 0.6;
+      }
+      tracerGeo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    }
     const tracerMat = new THREE.MeshBasicMaterial({
-      color: 0xffdf9a, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false,
+      color: 0xffdf9a, vertexColors: true, transparent: true, opacity: 0.9,
+      blending: THREE.AdditiveBlending, depthWrite: false,
     });
     this.tracerMesh = new THREE.InstancedMesh(tracerGeo, tracerMat, 64);
     this.tracerMesh.count = 0;
     this.tracerMesh.frustumCulled = false;
     this.group.add(this.tracerMesh);
-    const headGeo = new THREE.SphereGeometry(0.028, 8, 6);
-    const headMat = new THREE.MeshBasicMaterial({ color: 0xfff3cf });
+    // A7: modeled bullet — ogive-nosed copper projectile (lathe profile),
+    // spinning around its flight axis; B5 glow comes from emissive + halo
+    const profile: THREE.Vector2[] = [];
+    profile.push(new THREE.Vector2(0.0001, -0.02));
+    profile.push(new THREE.Vector2(0.0088, -0.02));
+    profile.push(new THREE.Vector2(0.0088, 0.004));
+    profile.push(new THREE.Vector2(0.0078, 0.012));
+    profile.push(new THREE.Vector2(0.0052, 0.02));
+    profile.push(new THREE.Vector2(0.0001, 0.026));
+    const headGeo = new THREE.LatheGeometry(profile, 12);
+    const headMat = new THREE.MeshStandardMaterial({
+      color: 0xc98f4e, metalness: 0.85, roughness: 0.3,
+      // hot core: white-yellow and well above 1 so the head itself glows (B5)
+      emissive: 0xffdb8a, emissiveIntensity: 2.8,
+    });
     this.headMesh = new THREE.InstancedMesh(headGeo, headMat, 64);
     this.headMesh.count = 0;
     this.headMesh.frustumCulled = false;
     this.group.add(this.headMesh);
+    // B5: additive halo billboards riding each projectile head
+    const haloMat = new THREE.SpriteMaterial({
+      map: mats.textures.dust,
+      color: 0xffe2a0,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      opacity: 0.85,
+    });
+    for (let i = 0; i < 64; i++) {
+      const s = new THREE.Sprite(haloMat.clone());
+      s.visible = false;
+      this.group.add(s);
+      this.haloPool.push(s);
+    }
     // pooled lights that ride the projectiles nearest the camera
     for (let i = 0; i < 4; i++) {
-      const l = new THREE.PointLight(0xffd9a0, 0, 4.5, 2);
+      const l = new THREE.PointLight(0xffd9a0, 0, 3.2, 2);
       this.group.add(l);
       this.tracerLights.push(l);
     }
@@ -167,12 +189,9 @@ export class Effects {
     for (const m of this.debrisMeshes) m.count = 0;
     this.decalGroup.clear();
     this.decalCount = 0;
-    for (const g of this.gunMeshes) this.group.remove(g);
+    for (const g of this.gunMeshes) { g.userData.settled = false; this.group.remove(g); }
     this.gunMeshes = [];
     this.dust = [];
-    this.blood = [];
-    this.stainGroup.clear();
-    this.stainCount = 0;
     this.tracerMesh.count = 0;
     this.headMesh.count = 0;
     this.wakeSpawnDist = new Map();
@@ -181,18 +200,28 @@ export class Effects {
   }
 
   /** React to freshly drained events (muzzle flash, dust bursts). */
-  onEvents(events: SimEvent[], flashScale = 1) {
+  onEvents(
+    events: SimEvent[],
+    flashScale = 1,
+    muzzleAt?: (shooter: string, dir: number[]) => THREE.Vector3 | null,
+  ) {
     for (const e of events) {
       if (e.type === 'SHOT') {
         const s = this.flashPool.find((f) => !f.visible);
         if (s) {
-          s.position.set(e.pos[0] + e.dir[0] * 0.25, e.pos[1] + e.dir[1] * 0.25, e.pos[2] + e.dir[2] * 0.25);
+          // B5: sit the flash on the rendered barrel tip when we can resolve
+          // it; the sim's muzzle point is only a body-relative estimate.
+          const tip = muzzleAt?.(e.shooter, e.dir) ?? null;
+          if (tip) s.position.copy(tip);
+          else s.position.set(e.pos[0] + e.dir[0] * 0.06, e.pos[1] + e.dir[1] * 0.06, e.pos[2] + e.dir[2] * 0.06);
           s.visible = true;
-          // sim-time lifetime: the flash hangs through slow motion
-          s.userData.untilSim = e.t + 0.05;
-          s.scale.setScalar(e.weapon === 'smg' ? 0.34 : 0.46);
+          // short sim-time lifetime with fade-out: no lingering detached
+          // glow blob between muzzle and bullet (B5)
+          s.userData.untilSim = e.t + 0.028;
+          s.userData.baseScale = e.weapon === 'smg' ? 0.3 : 0.4;
+          s.scale.setScalar(s.userData.baseScale);
         }
-        this.flashLight.position.set(e.pos[0], e.pos[1], e.pos[2]);
+        this.flashLight.position.copy(s ? s.position : new THREE.Vector3(e.pos[0], e.pos[1], e.pos[2]));
         this.flashLight.intensity = 14;
         // muzzle smoke: a few slow pale wisps drifting off the barrel (A5)
         for (let i = 0; i < 3; i++) {
@@ -206,22 +235,6 @@ export class Effects {
             vz: e.dir[2] * rand(this.rng, 0.4, 1.0) + rand(this.rng, -0.25, 0.25),
             born: e.t,
             life: rand(this.rng, 0.5, 1.3),
-          });
-        }
-      }
-      if (e.type === 'BLOOD') {
-        // brief dark-red mist, film-style: disperses within a second
-        for (let i = 0; i < 16; i++) {
-          if (this.blood.length >= 600) this.blood.shift();
-          this.blood.push({
-            x: e.pos[0] + rand(this.rng, -0.12, 0.12),
-            y: e.pos[1] + rand(this.rng, -0.15, 0.15),
-            z: e.pos[2] + rand(this.rng, -0.12, 0.12),
-            vx: rand(this.rng, -1.1, 1.1),
-            vy: rand(this.rng, -0.4, 0.9),
-            vz: rand(this.rng, -1.1, 1.1),
-            born: e.t,
-            life: rand(this.rng, 0.35, 0.8),
           });
         }
       }
@@ -246,7 +259,7 @@ export class Effects {
   }
 
   /** Sync persistent visuals with the world; simT drives dust motion. */
-  update(world: World, simDt: number, camPos?: THREE.Vector3) {
+  update(world: World, simDt: number, camPos?: THREE.Vector3, timeScale = 1) {
     // casings
     const n = Math.min(world.casings.length, MAX_CASINGS);
     for (let i = 0; i < n; i++) {
@@ -284,30 +297,76 @@ export class Effects {
     }
 
     // dropped guns
+    // B10: the dropped weapon matches the type that was carried, and carries
+    // enough shape to catch a specular highlight — a single small dark box on
+    // a near-black marble floor was invisible at wide-shot distance, which is
+    // why the guns looked like they vanished.
     while (this.gunMeshes.length < world.droppedGuns.length) {
+      const i = this.gunMeshes.length;
+      const kind = world.droppedGuns[i].kind;
       const g = new THREE.Group();
-      const slide = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.05, 0.24), this.mats.gunmetal);
-      const grip = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.11, 0.05), this.mats.black);
-      grip.position.set(0, -0.04, 0.06);
-      grip.rotation.x = 0.3;
-      g.add(slide, grip);
+      const steel = this.mats.gunmetal;
+      const dark = this.mats.black;
+      if (kind === 'smg') {
+        const body = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.085, 0.34), steel);
+        const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.13, 8), steel);
+        barrel.rotation.x = Math.PI / 2;
+        barrel.position.set(0, 0.012, -0.23);
+        const mag = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.15, 0.055), dark);
+        mag.position.set(0, -0.1, 0.06);
+        mag.rotation.x = -0.12;
+        const stock = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.05, 0.15), dark);
+        stock.position.set(0, 0.012, 0.23);
+        const grip = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.085, 0.042), dark);
+        grip.position.set(0, -0.062, 0.13);
+        grip.rotation.x = -0.22;
+        g.add(body, barrel, mag, stock, grip);
+      } else {
+        const slide = new THREE.Mesh(new THREE.BoxGeometry(0.036, 0.052, 0.22), steel);
+        const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, 0.055, 8), steel);
+        barrel.rotation.x = Math.PI / 2;
+        barrel.position.set(0, 0.008, -0.13);
+        const grip = new THREE.Mesh(new THREE.BoxGeometry(0.034, 0.11, 0.05), dark);
+        grip.position.set(0, -0.05, 0.065);
+        grip.rotation.x = -0.24;
+        const mag = new THREE.Mesh(new THREE.BoxGeometry(0.026, 0.03, 0.04), steel);
+        mag.position.set(0, -0.104, 0.078);
+        g.add(slide, barrel, grip, mag);
+      }
       this.group.add(g);
       this.gunMeshes.push(g);
     }
     world.droppedGuns.forEach((gun, i) => {
       const mesh = this.gunMeshes[i];
+      // a gun that has come to rest never moves again, so stop re-transforming
+      // it — with 23 weapons on the floor by the end that adds up (B10)
+      if (gun.resting && mesh.userData.settled) return;
       mesh.position.set(gun.pos[0], gun.pos[1] + 0.02, gun.pos[2]);
-      mesh.rotation.set(gun.resting ? Math.PI / 2 : 0, gun.yaw, 0);
+      // resting guns lie flat on their side (B6)
+      mesh.rotation.set(0, gun.yaw, gun.resting ? Math.PI / 2 : 0);
+      if (gun.resting) mesh.userData.settled = true;
     });
 
     // tracers from live projectiles: trail + glowing head + local light (A5)
+    // A7: at speed the head is a hot streak; in slow motion the emissive
+    // drops away so the copper jacket of the modeled bullet is what reads.
+    // Knee at 0.12: the ordinary slow-motion windows keep the full tracer
+    // glow; only the extreme inserts (muzzle exit 0.05x, bullet-cam 0.022x)
+    // pull it back far enough for the modeled projectile to read.
+    const slowPull = Math.min(1, timeScale / 0.12);
+    (this.headMesh.material as THREE.MeshStandardMaterial).emissiveIntensity =
+      0.25 + 2.55 * slowPull;
+    // the streak pulls back with the glow, so a slow-motion insert shows the
+    // projectile rather than a bright bar next to the lens
+    (this.tracerMesh.material as THREE.MeshBasicMaterial).opacity = 0.2 + 0.7 * slowPull;
+    const trailLen = 1.6 * (0.16 + 0.84 * slowPull);
     let tc = 0;
     const heads: { x: number; y: number; z: number; d2: number }[] = [];
     for (const p of world.projectiles) {
       if (p.done || tc >= 64) continue;
       const dist = (world.t - p.born) * p.speed;
       const head = Math.min(dist, p.hitDist);
-      const tail = Math.max(0, head - 1.6);
+      const tail = Math.max(0, head - trailLen);
       if (head <= 0.01) continue;
       const hx = p.from[0] + p.dir[0] * head;
       const hy = p.from[1] + p.dir[1] * head;
@@ -323,21 +382,41 @@ export class Effects {
       this.dummy.scale.set(1, 1, lenT);
       this.dummy.updateMatrix();
       this.tracerMesh.setMatrixAt(tc, this.dummy.matrix);
-      // hot head
+      // modeled bullet at the head: nose along the velocity, spinning
+      // around the flight axis (A7)
+      this.dirV.set(p.dir[0], p.dir[1], p.dir[2]);
+      this.alignQ.setFromUnitVectors(this.yAxis, this.dirV);
       this.dummy.position.set(hx, hy, hz);
-      this.dummy.rotation.set(0, 0, 0);
-      this.dummy.scale.setScalar(p.wake ? 1.5 : 1);
+      this.dummy.quaternion.copy(this.alignQ);
+      this.dummy.rotateY((world.t - p.born) * 230 + tc * 1.7);
+      this.dummy.scale.setScalar(p.wake ? 1.4 : 1);
       this.dummy.updateMatrix();
       this.headMesh.setMatrixAt(tc, this.dummy.matrix);
+      // B5 halo: additive billboard glued to the head; in slow motion the
+      // halo pulls back so the modeled bullet reads (A7)
+      // A7: at speed the halo is the tracer; in slow motion it collapses to a
+      // small hot point so the modeled copper projectile is what reads.
+      const halo = this.haloPool[tc];
+      halo.visible = true;
+      halo.position.set(hx, hy, hz);
+      const hs = (p.wake ? 0.3 : 0.22) * (0.12 + 0.88 * slowPull);
+      // slight stretch along the flight axis reads as motion blur
+      halo.scale.set(hs * (1 + 0.5 * slowPull), hs, hs);
+      (halo.material as THREE.SpriteMaterial).opacity = 0.18 + 0.67 * slowPull;
       if (camPos) {
         const dx = hx - camPos.x, dy = hy - camPos.y, dz = hz - camPos.z;
         heads.push({ x: hx, y: hy, z: hz, d2: dx * dx + dy * dy + dz * dz });
       }
       // spawn air-wake rings behind a dodge near-miss round
       if (p.wake) {
+        // A7: the bullet-cam rides ~0.3 m off its round, so its wake has to
+        // be a fine ripple; the dodge near-misses are seen from across the
+        // hall and keep the big rings.
+        const ringK = p.cam ? 0.16 : 1;
+        const step = p.cam ? 0.16 : 0.55;
         let last = this.wakeSpawnDist.get(p) ?? 0;
-        while (last + 0.55 < head) {
-          last += 0.55;
+        while (last + step < head) {
+          last += step;
           const slot = this.ringPool.find((r) => !r.mesh.visible);
           if (!slot) break;
           slot.born = world.t;
@@ -352,7 +431,8 @@ export class Effects {
             p.from[1] + p.dir[1] * (last + 1),
             p.from[2] + p.dir[2] * (last + 1),
           );
-          slot.mesh.scale.setScalar(1);
+          slot.mesh.userData.k = ringK;
+          slot.mesh.scale.setScalar(ringK);
         }
         this.wakeSpawnDist.set(p, last);
       }
@@ -362,12 +442,14 @@ export class Effects {
     this.tracerMesh.instanceMatrix.needsUpdate = true;
     this.headMesh.count = tc;
     this.headMesh.instanceMatrix.needsUpdate = true;
-    // ride the 4 nearest heads with real lights
+    for (let i = tc; i < this.haloPool.length; i++) this.haloPool[i].visible = false;
+    // ride the 4 nearest heads with real lights — exactly at the head, and
+    // tuned so only surfaces brighten (the halo sprite is the visible glow)
     heads.sort((a, b) => a.d2 - b.d2);
     this.tracerLights.forEach((l, i) => {
       if (i < heads.length) {
         l.position.set(heads[i].x, heads[i].y, heads[i].z);
-        l.intensity = 2.6;
+        l.intensity = 1.9;
       } else {
         l.intensity = 0;
       }
@@ -382,49 +464,10 @@ export class Effects {
         mat.opacity = 0.5;
         continue;
       }
-      r.mesh.scale.setScalar(1 + Math.min(age * 4.2, 3.6));
+      const k = (r.mesh.userData.k as number) ?? 1;
+      r.mesh.scale.setScalar(k * (1 + Math.min(age * 4.2, 3.6)));
       mat.opacity = 0.4 * Math.max(0, 1 - age / 1.1);
     }
-
-    // A4: persistent floor stains under downed defenders (never removed)
-    while (this.stainCount < world.bloodStains.length) {
-      const s = world.bloodStains[this.stainCount++];
-      const mat = new THREE.MeshStandardMaterial({
-        map: this.mats.textures.blood,
-        alphaMap: this.mats.textures.bloodAlpha,
-        transparent: true,
-        opacity: 0.95,
-        color: 0xa53a2e,
-        roughness: 0.3,
-        depthWrite: false,
-        polygonOffset: true,
-        polygonOffsetFactor: -1,
-      });
-      const m = new THREE.Mesh(new THREE.PlaneGeometry(s.size, s.size), mat);
-      m.rotation.x = -Math.PI / 2;
-      m.rotation.z = s.rot;
-      m.position.set(s.pos[0], s.pos[1], s.pos[2]);
-      this.stainGroup.add(m);
-    }
-
-    // blood mist drift (sim time → hangs in slow-mo, settles fast)
-    let bi = 0;
-    for (const p of this.blood) {
-      const age = world.t - p.born;
-      if (age > p.life || age < 0) continue;
-      p.x += p.vx * simDt;
-      p.y += p.vy * simDt;
-      p.z += p.vz * simDt;
-      p.vy -= 2.2 * simDt;
-      p.vx *= 1 - 1.8 * simDt;
-      p.vz *= 1 - 1.8 * simDt;
-      this.bloodPos[bi * 3] = p.x;
-      this.bloodPos[bi * 3 + 1] = p.y;
-      this.bloodPos[bi * 3 + 2] = p.z;
-      bi++;
-    }
-    this.bloodGeo.setDrawRange(0, bi);
-    this.bloodGeo.attributes.position.needsUpdate = true;
 
     // dust drift (moves in sim time → hangs during slow-mo)
     let di = 0;
@@ -445,9 +488,17 @@ export class Effects {
     this.dustGeo.setDrawRange(0, di);
     this.dustGeo.attributes.position.needsUpdate = true;
 
-    // fade flashes (sim-time)
+    // fade + shrink flashes (sim-time)
     for (const f of this.flashPool) {
-      if (f.visible && world.t > (f.userData.untilSim ?? 0)) f.visible = false;
+      if (!f.visible) continue;
+      const rem = (f.userData.untilSim ?? 0) - world.t;
+      if (rem <= 0) {
+        f.visible = false;
+        continue;
+      }
+      const k = Math.min(1, rem / 0.028);
+      f.scale.setScalar((f.userData.baseScale ?? 0.4) * (0.35 + 0.65 * k));
+      (f.material as THREE.SpriteMaterial).opacity = k;
     }
     this.flashLight.intensity *= 0.72;
   }

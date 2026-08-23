@@ -1,5 +1,6 @@
 /** FNV-1a hash over the full quantized simulation state (determinism tests). */
 import type { World } from './world';
+import { hashSlabs } from './damage';
 
 function fnv(h: number, x: number): number {
   h ^= x & 0xff;
@@ -21,6 +22,8 @@ function hashStr(h: number, s: string): number {
 
 export function hashWorld(w: World): number {
   let h = 0x811c9dc5;
+  // B8: cladding damage is persistent simulation state
+  h = hashSlabs(w.slabs, fnv, h);
   h = fnv(h, q(w.t));
   for (const a of w.actors.values()) {
     h = hashStr(h, a.id);
@@ -57,11 +60,6 @@ export function hashWorld(w: World): number {
     h = fnv(h, q(g.pos[0]));
     h = fnv(h, q(g.pos[2]));
     h = fnv(h, q(g.yaw));
-  }
-  for (const b of w.bloodStains) {
-    h = fnv(h, q(b.pos[0]));
-    h = fnv(h, q(b.pos[2]));
-    h = fnv(h, q(b.size));
   }
   return h >>> 0;
 }
