@@ -118,6 +118,12 @@ task text:
   shadows; during the destruction phase pale dust visibly hangs and drifts in
   the air.
 
+**A4 (2026-08-23):** The "no blood" constraint is lifted: stylized blood at the
+level of the film is now permitted — brief red impact sprays on hits and blood
+staining on uniforms of downed defenders. Still no gore: no dismemberment, no
+wound close-ups, no lingering suffering. (Published demo videos will be marked
+as sensitive content where platforms require it.)
+
 ---
 
 ## Agent environment for this scene
