@@ -124,6 +124,10 @@ staining on uniforms of downed defenders. Still no gore: no dismemberment, no
 wound close-ups, no lingering suffering. (Published demo videos will be marked
 as sensitive content where platforms require it.)
 
+**A6 (2026-08-23):** Revokes A4 — the demo is blood-free again (no impact
+sprays, no stains), restoring the frozen prompt's original no-blood rule, so
+published clips need no sensitive-content marking.
+
 **A5 (2026-08-23):** Ballistics special-effects package. Bullets must be
 modeled as real visible projectiles, not hitscan-only effects:
 
