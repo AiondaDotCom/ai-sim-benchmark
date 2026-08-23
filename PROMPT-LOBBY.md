@@ -156,6 +156,14 @@ routed through the audio director as timed events so they pitch with the time
 scale, mixed under music and gunfire as texture, with the music ducking under
 the checkpoint line. Every line and voice id documented in ASSETS.md.
 
+**A12 (2026-08-23):** Damage must become structural, not only surface-deep:
+impact craters and stripped areas displace the surface inward so grazing light
+produces real relief and self-shadowing, and the outline of a shot column or
+wall panel visibly degrades — corners chipped, edges nibbled into an irregular
+profile — so heavily worked stone reads as damaged in pure silhouette. Removed
+geometry spawns debris of matching size, the cavity persists, tessellation is
+spent only on surfaces that actually get shot, and the 60 fps median holds.
+
 **A11 (2026-08-23):** Character look-dev loop against the "Playmobil figures"
 verdict: build a dev-only turntable mode that renders each character type
 isolated under neutral studio light from fixed angles; diagnose the toy-look
