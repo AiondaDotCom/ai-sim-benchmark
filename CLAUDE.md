@@ -15,6 +15,16 @@ A benchmark for comparing autonomous coding agents (Claude Code, Codex CLI, Grok
 
 The contents of `runs/*` are benchmark artifacts. The protocol forbids manually editing generated files — a run's code, README, and tests must stay exactly as the agent produced them, including in failed runs (Haiku 4.5, Grok). Fixes happen only by messaging the agent and logging the intervention in `INTERVENTIONS.md`. Editing at the repo root (README, PROMPT, INTERVENTIONS, this file) is fine; `PROMPT.md`'s task text is frozen and changes to it would invalidate comparability.
 
+## How to run agents on this benchmark (orchestration pattern)
+
+Learned from the Scene 2 lobby runs (see the comparative observation in `INTERVENTIONS.md`); apply it to new runs and to any multi-agent work in this repository:
+
+- **Opus orchestrates and owns the acceptance criteria.** The orchestrator's real job is judgement — decomposing requirements, deciding what counts as done, writing interventions — and that is the dimension where calibration matters most.
+- **Fable subagents build, in parallel.** Fast, competent execution and clean absorption of many change requests is its demonstrated strength.
+- **Deep review goes to fresh critic subagents, not to the orchestrator.** The orchestrator accumulates context and becomes a co-owner of the decisions; ownership bias is what makes an agent wave through its own screenshots. A critic must have fresh context, no authorship of the code under review, and an explicit mandate to refute rather than confirm.
+- **Whoever built something never signs it off.** This is a role rule, not a model rule; rotate roles so no single model's blind spot is inherited by every decision.
+- **Prefer measurement over eyeballing.** The most reliable findings in these runs came from measurement harnesses (weapon-alignment over every firing frame, spectral analysis of a sound effect, muzzle-offset statistics, a pixel-diff noise floor), not from visual judgement. Any acceptance criterion that can become a test should become one, and stay in the repo.
+
 ## Commands (inside a run directory)
 
 Each `runs/<agent-model>/` is an independent npm project; run commands from within that directory:

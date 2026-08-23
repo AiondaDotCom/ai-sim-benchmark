@@ -191,6 +191,20 @@ For every agent run:
 7. Record model, agent version, configuration, interventions, test results, and final rubric score. Elapsed time, token usage, and cost are recorded as metadata and do not affect the score.
 8. Evaluate at least three fixed seeds shared by all submissions.
 
+### Orchestration roles
+
+A finding from the Scene 2 runs, recorded here because it changed how this benchmark is operated. The decisive difference between the models was not implementation quality but **calibration** — how reliably an agent judges whether its own output actually matches the brief. Every agent in these runs was a competent implementer; the recurring failure was an agent reviewing its own screenshots and passing work that a human reviewer then rejected.
+
+The resulting division of roles:
+
+- The **orchestrator holds the acceptance criteria** and does the judging. Give that role to the better-calibrated model (currently Opus).
+- **Builders are subagents**, run in parallel, chosen for execution speed and clean absorption of change requests (currently Fable).
+- **Deep review goes to fresh critic subagents** rather than to the orchestrator, which accumulates context and becomes a co-owner of the decisions. A critic needs fresh context, no authorship of the code under review, and an explicit mandate to refute rather than confirm.
+- **No agent signs off its own work**, and roles rotate, so that no single model's blind spot propagates into every decision.
+- **Measurement beats visual judgement.** The most reliable findings came from measurement harnesses, not from looking at pictures; acceptance criteria that can be turned into tests should be, and those tests stay in the run.
+
+Whether the pattern is a property of the models or of their position in the pipeline is not yet established — an agent inheriting someone else's half-finished code is structurally motivated to distrust it. Swapping the roles on an identical task would settle it.
+
 ## Agent environment
 
 The only MCP server an agent **needs** for this benchmark is **chrome-devtools (chrome-mcp)** — it drives a real Chrome instance: open pages, evaluate JavaScript, take screenshots. It is used by the agents to visually verify their running demo, and by the orchestrator to independently verify results and record the demo videos (canvas capture via MediaRecorder). Every run must provide it.
