@@ -148,6 +148,14 @@ through easing, anticipation, overshoot and secondary motion instead of linear
 interpolation. Performance target 60 fps stays binding, with a `?quality=low`
 path.
 
+**A10 (2026-08-23):** English voice acting via ElevenLabs text-to-speech, with
+distinct voices per role (checkpoint guards, radio dispatcher, squad leader),
+radio lines band-passed into walkie-talkie sound. All lines must be original
+generic security/police phrasing — never dialogue from the film. Lines are
+routed through the audio director as timed events so they pitch with the time
+scale, mixed under music and gunfire as texture, with the music ducking under
+the checkpoint line. Every line and voice id documented in ASSETS.md.
+
 **A5 (2026-08-23):** Ballistics special-effects package. Bullets must be
 modeled as real visible projectiles, not hitscan-only effects:
 
