@@ -1,0 +1,6 @@
+node_modules/
+dist/
+scripts/devserver.log
+scripts/preview.log
+*.local
+.DS_Store

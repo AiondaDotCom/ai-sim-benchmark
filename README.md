@@ -104,6 +104,16 @@ Passed after 1 corrective intervention (frozen prompt, 2026-08-22): a camera cut
 
 Higher-quality video with the generated soundtrack and sound effects: [demo.mp4](runs-lobby/claude-code-opus-5/docs/demo.mp4) · Source: [`runs-lobby/claude-code-opus-5/`](runs-lobby/claude-code-opus-5/)
 
+### Claude Code — Fable 5
+
+Passed after 1 corrective intervention (frozen prompt + requirement changes A1/A2, 2026-08-23): the first render pass was far too bright and clinical — the film's dark desaturated green-grey grade was missing, walls read as flat white plaster, and the generated fabric textures did not visibly render on the characters. After the correction the agent rebuilt the look in-scene (dark green-graded lighting with a blown-out entrance, regenerated stone-panel and high-contrast marble textures, readable fabric weave, face details) and re-verified every acceptance beat itself. Implements A1 (heavy-metal drop synchronized to the eruption at second 12, measured +9.4 dB) and A2 (procedural characters with capsule anatomy, articulated hands, draped coat — no Blender needed). 9/9 tests, 47 generated asset files, fully offline. Details in [INTERVENTIONS.md](INTERVENTIONS.md).
+
+![Claude Code Fable 5 lobby shootout demo](runs-lobby/claude-code-fable-5/docs/demo.gif)
+
+*(GIF plays at 4× speed; the sequence runs ~70 s in real time.)*
+
+Higher-quality video with the generated soundtrack and sound effects: [demo.mp4](runs-lobby/claude-code-fable-5/docs/demo.mp4) · Source: [`runs-lobby/claude-code-fable-5/`](runs-lobby/claude-code-fable-5/)
+
 ## Status of the recorded runs
 
 The first six runs in `runs/` are a **pilot round, not a protocol-conformant comparison.** They were carried out while the task requirements were still changing. The deviations below are documented rather than hidden; read the results as individual case studies, not as a ranking. The runs recorded after the prompt freeze (OpenCode — Kimi K3, Ox Alpha, DeepSeek V4 Pro) received the frozen prompt verbatim, but still share two deviations with the pilot round: generation ran on the host instead of a disposable VM, and the evaluator was the same non-independent orchestrating session.
