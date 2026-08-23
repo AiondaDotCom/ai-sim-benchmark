@@ -103,6 +103,7 @@ async function boot() {
   const { Cladding } = await import('./render/cladding');
   let cladding = new Cladding(mats, world.slabs);
   scene.add(cladding.group);
+  effects.bindCladding(cladding);
   // fast-forward to ?t= start time (events are consumed silently)
   while (world.t < cfg.startT) {
     world.step();
@@ -140,6 +141,7 @@ async function boot() {
     const realDt = Math.min((now - last) / 1000, 0.1);
     last = now;
 
+    renderer.info.autoReset = false;
     const prevT = world.t;
     if (!cfg.freeze) stepper.advance(realDt);
     const simDt = world.t - prevT;
@@ -157,6 +159,8 @@ async function boot() {
     }
 
     audio.setTimeScale(stepper.scale());
+    // B25: the lens is the listener, for distance attenuation
+    audio.setListener(director.camera.position.x, director.camera.position.y, director.camera.position.z);
     audio.handleEvents(events);
 
     for (const [id, ch] of chars) ch.update(world.actors.get(id)!, world.t);
@@ -166,13 +170,33 @@ async function boot() {
       const ch = chars.get(shooter);
       return ch && ch.muzzleTipFor(dir as [number, number, number], muzzleTip) ? muzzleTip : null;
     });
-    director.update(world, realDt);
+    director.update(world, realDt, events, stepper.scale());
     effects.update(world, simDt, director.camera.position, stepper.scale());
 
     post.update(realDt, stepper.scale());
     post.render();
     // headless-verification aid (no UI): current sim time on the window
     (window as unknown as { __simT: number }).__simT = world.t;
+    // ...and the renderer's own counters. Wall-clock frame timing on a laptop
+    // is far too noisy to resolve a 1-2 ms regression (repeated A/B runs here
+    // flipped their ordering), so draw calls and triangles are the number to
+    // check a rendering change against: they are deterministic per frame.
+    // autoReset is off (set below) because the post stack renders several
+    // passes per frame and each render() would otherwise zero the counters —
+    // reading them after post.render() reported the final fullscreen quad
+    // alone, one call and one triangle.
+    (window as unknown as { __rinfo: unknown }).__rinfo = {
+      calls: renderer.info.render.calls,
+      tris: renderer.info.render.triangles,
+      progs: renderer.info.programs?.length ?? 0,
+      geos: renderer.info.memory.geometries,
+      texs: renderer.info.memory.textures,
+    };
+    renderer.info.reset();
+    // headless-diagnostic hook (no UI): the scene graph and the live camera,
+    // so a bad quad can be found by walking the tree and measuring rather than
+    // by squinting at a screenshot.
+    (window as unknown as { __dbg: unknown }).__dbg = { scene, camera: director.camera, shake: director.shakeAmp };
 
     // loop the demo
     if (world.t >= DURATION + 0.5 && cfg.loop) {
@@ -181,6 +205,7 @@ async function boot() {
       // the loop starts from an undamaged hall, so rebind to the fresh grids
       scene.remove(cladding.group);
       cladding = new Cladding(mats, world.slabs);
+      effects.bindCladding(cladding);
       scene.add(cladding.group);
       effects.reset();
       for (const ch of chars.values()) ch.reset();

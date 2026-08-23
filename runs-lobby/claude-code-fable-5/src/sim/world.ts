@@ -8,9 +8,9 @@ import { mulberry32, rand, randInt, Rng } from './rng';
 import {
   V3, add, scale, norm, sub, len, rayAABB, segmentHitsCapsule, segSegDist, RayHit,
 } from './math3';
-import { Surface, buildSurfaces } from './layout';
+import { Surface, buildSurfaces, COLUMNS, COLUMN, settleClearOfSet, bodyRadiusFor } from './layout';
 import * as TL from './timeline';
-import { Slab, makeSlab, localOf, stripChunk, cellArea } from './damage';
+import { Slab, makeSlab, localOf, stripChunk, cellArea, isStripped, cellSize, releaseTile, forceReleaseTile } from './damage';
 import type { SimEvent } from './events';
 
 export const FIXED_DT = 1 / 240;
@@ -38,14 +38,50 @@ export interface Casing {
   /** spawn time (A7: lets the casing insert follow one casing). */
   born: number;
 }
+/**
+ * B18: the fragment pool ceiling. Large enough that a full run does not reach
+ * it (measured below 9000), with an explicit recycle policy if it ever does.
+ */
+const MAX_DEBRIS_SIM = 12000;
+
 export interface Debris {
   pos: V3; vel: V3; spin: V3; angle: V3;
   size: number; kind: number; resting: boolean; bounces: number;
+  /**
+   * B18 size class: 0 fine grit, 1 gravel-sized chip, 2 larger flake. The
+   * renderer draws each class from its own instanced mesh with its own
+   * geometry, so the cheap class can carry the density.
+   */
+  cls: 0 | 1 | 2;
 }
 export interface Decal {
   surface: string; pos: V3; normal: V3; size: number;
   kind: 'hole' | 'crater'; rot: number;
+  /**
+   * B16/B20: which layer this mark describes. A `facing` mark is a spall
+   * crater in polished stone and is only valid while that stone is still
+   * there — it must vanish if the cladding under it is later shot away.
+   * A `core` mark is a pock in the exposed coarse material and stays.
+   */
+  layer: 'facing' | 'core';
+  /** slab this mark sits on, and its centre in that slab's grid uv */
+  slab: string; su: number; sv: number;
 }
+/**
+ * B19: a whole tile of cladding that has let go and is falling.
+ *
+ * Deliberately an order of magnitude larger than a chip and much heavier in
+ * its motion: slower rotation, a steeper fall, no fluttering. A handful of
+ * these over the fight — they are punctuation, not texture.
+ */
+export interface TileSlab {
+  pos: V3; vel: V3; angle: V3; spin: V3;
+  size: number; thickness: number;
+  /** which way the face it came off was pointing, for the initial pose */
+  axis: 0 | 2; sign: 1 | -1;
+  born: number; landed: boolean;
+}
+
 export interface DroppedGun {
   pos: V3; vel: V3; yaw: number; spinY: number; resting: boolean;
   /** B10: the weapon that was actually being carried. */
@@ -76,6 +112,7 @@ export class World {
   casings: Casing[] = [];
   debris: Debris[] = [];
   decals: Decal[] = [];
+  tileSlabs: TileSlab[] = [];
   droppedGuns: DroppedGun[] = [];
   /** B8: cladding damage grids, one per destructible face. */
   slabs: Slab[] = [];
@@ -87,6 +124,8 @@ export class World {
   private roundPlan: { t: number; soldier: number; first: boolean }[] = [];
   private roundIdx = 0;
   private cueIdx = 0;
+  /** B28: events scheduled for a later frame (melee contact and reaction). */
+  private pending: { t: number; ev: SimEvent }[] = [];
   private deathList: { t: number; id: string }[] = [];
   private deathIdx = 0;
   private settleIdx = 0;
@@ -95,6 +134,11 @@ export class World {
   private finalCasingDone = false;
   private walkAcc: Record<string, number> = { neo: 0, trin: 0 };
   private lastPos: Record<string, V3 | null> = { neo: null, trin: null };
+  /** B25: per-soldier stride accumulation during the rush in. */
+  private bootAcc: number[] = [];
+  private bootPrev: (V3 | null)[] = [];
+  private gearAcc: number[] = [];
+  private planted: boolean[] = [];
 
   constructor(seed: number) {
     this.seed = seed;
@@ -130,6 +174,28 @@ export class World {
     return out;
   }
 
+  /**
+   * B30: a defender never occupies the same space as the set, at any frame.
+   *
+   * The B28.1 clearance check only ever looked at the final resting pose.
+   * Sampled across the whole run, defenders were up to 0.84 m inside a column
+   * while RUNNING to cover: the run is a straight lerp from the door to the
+   * cover point, and several of those lines pass straight through the very
+   * columns they are running to hide behind. The bullet-cam target was the
+   * visible symptom, standing half inside his column at the moment the shot
+   * lands, which is the one frame the camera is closest to him.
+   *
+   * Defenders only. The protagonists' choreography touches the set on purpose
+   * (the wall run is the obvious case) and pushing them off it would break a
+   * set piece to fix a problem they do not have.
+   */
+  private keepClearOfSet(a: ActorSim) {
+    if (a.pose.action === 'hidden') return;
+    const [x, z] = settleClearOfSet(a.pose.pos[0], a.pose.pos[2], bodyRadiusFor(a.pose.action));
+    if (x === a.pose.pos[0] && z === a.pose.pos[2]) return;
+    a.pose = { ...a.pose, pos: [x, a.pose.pos[1], z] };
+  }
+
   private emit(e: SimEvent) {
     this.events.push(e);
   }
@@ -150,9 +216,11 @@ export class World {
         a.pose = a.id === 'neo' ? TL.neoPose(t) : TL.trinPose(t);
       } else if (a.role === 'guard') {
         a.pose = TL.guardPose(a.id, t);
+        this.keepClearOfSet(a);
       } else {
         const def = TL.SOLDIERS.find((s) => s.id === a.id)!;
         a.pose = TL.soldierPose(def, t);
+        this.keepClearOfSet(a);
       }
       a.vel = [(a.pose.pos[0] - prev[0]) / dt, 0, (a.pose.pos[2] - prev[2]) / dt];
       a.velLag = [
@@ -169,6 +237,18 @@ export class World {
     while (this.deathIdx < this.deathList.length && this.deathList[this.deathIdx].t <= t) {
       const d = this.deathList[this.deathIdx++];
       this.emit({ type: 'GUARD_DOWN', t: d.t, id: d.id, style: TL.DEATH_STYLE[d.id] });
+      // B21: the knock-back punches a burst of dust out of the stone he is
+      // thrown into. Aimed at the face behind him rather than at him — the
+      // camera is on the stone, not on the man.
+      if (TL.DEATH_STYLE[d.id] === 'knockback') {
+        const a0 = this.actors.get(d.id);
+        if (a0) {
+          const back = this.slabBehind(a0.pose.pos);
+          if (back) {
+            this.applyImpact(back.surface, back.pos, back.normal, true, back.dir);
+          }
+        }
+      }
       // B10: every defender who goes down leaves the weapon he was carrying
       // on the floor at the point of the fall — the guards a holstered
       // sidearm, the soldiers their submachine gun.
@@ -189,6 +269,15 @@ export class World {
     }
 
     // 3. Cues.
+    // B28: scheduled melee events whose moment has arrived. Drained before
+    // the cue list so a hit and its reaction cannot land on the same frame as
+    // the swing that caused them.
+    for (let i = this.pending.length - 1; i >= 0; i--) {
+      if (this.pending[i].t > t) continue;
+      this.emit(this.pending[i].ev);
+      this.pending.splice(i, 1);
+    }
+
     while (this.cueIdx < TL.CUES.length && TL.CUES[this.cueIdx].t <= t) {
       const c = TL.CUES[this.cueIdx++];
       if (c.type === 'GUN_DROP') {
@@ -203,11 +292,82 @@ export class World {
         };
         this.droppedGuns.push(gun);
         this.emit({ type: 'GUN_DROP', t: c.t, pos: [...gun.pos], by: c.actor! });
+      } else if (c.type === 'TILE_GAG') {
+        // A13: the column the closing wide is already looking at, so the eye
+        // is in the right place when it goes.
+        // Candidates in preference order, because how destroyed a given face
+        // ends up is not fixed: doubling the squad (A15) chewed the first
+        // choice past the point where it had a loose tile left to give, and a
+        // single hardcoded face silently produced no gag at all.
+        for (const id of TL.GAG_SLAB) {
+          const face = this.slabs.find((s) => s.id === id);
+          const rel = face ? forceReleaseTile(face) : null;
+          if (face && rel) { this.dropTile(face, rel, true); break; }
+        }
+      } else if (c.type === 'STRIKE' || c.type === 'KICK') {
+        // the swing fires now; the landing and the reaction are scheduled.
+        // A flying kick leaves the ground well before it connects, so the
+        // contact delay is per-cue rather than assumed to be zero.
+        this.emit({ ...({ type: c.type } as SimEvent), t: c.t, actor: c.actor } as SimEvent);
+        const contact = c.t + (c.type === 'KICK' ? TL.KICK_CONTACT_DELAY : TL.STRIKE_CONTACT_DELAY);
+        const victim = this.nearestGuardTo(c.actor!, contact);
+        if (victim) {
+          const vp = this.actors.get(victim)!.pose.pos;
+          this.pending.push({
+            t: contact,
+            ev: { type: 'MELEE_HIT', t: contact, actor: c.actor!, target: victim, pos: [...vp] },
+          });
+          this.pending.push({
+            t: contact + TL.MELEE_REACT_DELAY,
+            ev: { type: 'MELEE_REACT', t: contact + TL.MELEE_REACT_DELAY, target: victim, pos: [...vp] },
+          });
+        }
       } else if (c.type === 'VO') {
         this.emit({ type: 'VO', t: c.t, line: c.line! });
       } else {
         this.emit({ ...( { type: c.type } as SimEvent), t: c.t, ...(c.actor ? { actor: c.actor } : {}) } as SimEvent);
       }
+    }
+
+    // 4b. B25: the squad rush. Each man's steps come off HIS OWN stride, so
+    // the clatter is many feet out of step with each other rather than one
+    // loud person; the sample and pitch vary per man from his index. The
+    // clatter stops the moment he sets into cover, which is what hands into
+    // the A15 standoff — the sudden absence is what makes the silence land.
+    for (let i = 0; i < TL.SOLDIERS.length; i++) {
+      const def = TL.SOLDIERS[i];
+      const a = this.actors.get(def.id);
+      if (!a) continue;
+      const prev = this.bootPrev[i] ?? null;
+      const running = a.alive && a.pose.action === 'run';
+      if (prev && running) {
+        const d = Math.hypot(a.pose.pos[0] - prev[0], a.pose.pos[2] - prev[2]);
+        // Each man gets his OWN stride length as well as his own phase. With
+        // a shared stride and a regularly spaced offset, men who set off
+        // together stayed in lockstep — measured at 41% of steps landing
+        // within 5 ms of another man's, which is a marching column rather than
+        // a squad rushing a lobby. Both values come off a hash of his index,
+        // so it is deterministic and they never re-sync.
+        const h1 = ((i * 2654435761) >>> 0) / 4294967296;
+        const h2 = ((i * 40503 + 12345) >>> 0 & 0xffff) / 65536;
+        const stride = 0.54 + h1 * 0.19;
+        this.bootAcc[i] = (this.bootAcc[i] ?? h2 * stride) + d;
+        if (this.bootAcc[i] > stride) {
+          this.bootAcc[i] -= stride;
+          this.emit({ type: 'BOOT', t, who: i, pos: [...a.pose.pos], plant: false });
+        }
+        this.gearAcc[i] = (this.gearAcc[i] ?? 0) + d;
+        if (this.gearAcc[i] > 1.45) {
+          this.gearAcc[i] = 0;
+          this.emit({ type: 'GEAR', t, who: i, pos: [...a.pose.pos] });
+        }
+      }
+      // the hard stop as he plants into cover
+      if (!this.planted[i] && a.alive && prev && !running && a.pose.action === 'cover') {
+        this.planted[i] = true;
+        this.emit({ type: 'BOOT', t, who: i, pos: [...a.pose.pos], plant: true });
+      }
+      this.bootPrev[i] = [...a.pose.pos];
     }
 
     // 4. Footsteps (audible only in the calm phases).
@@ -307,7 +467,7 @@ export class World {
       const dist = (t - p.born) * p.speed;
       if (dist >= p.hitDist) {
         p.done = true;
-        if (p.impact) this.applyImpact(p.impact.surface, p.impact.pos, p.impact.normal, p.chew);
+        if (p.impact) this.applyImpact(p.impact.surface, p.impact.pos, p.impact.normal, p.chew, p.dir);
       }
     }
 
@@ -319,7 +479,7 @@ export class World {
       this.settleIdx++;
       if (this.decals.length > 0) {
         const d = this.decals[randInt(this.rng, this.decals.length)];
-        for (let i = 0; i < 3; i++) this.spawnDebris(d.pos, d.normal, 0.5);
+        this.ejectCone(d.pos, d.normal, [...d.normal], 0.45, [3, 1, 0]);
       }
     }
     if (!this.finalCasingDone && t >= TL.FINAL_CASING_T) {
@@ -464,12 +624,39 @@ export class World {
     } else {
       const tgt = this.nearestAliveSoldier(shooter.pose.pos);
       if (!tgt) return;
-      // Deliberately chew the marble near the target's cover.
-      aimPoint = [
-        tgt.pose.pos[0] + rand(this.rng, -0.9, 0.9),
-        rand(this.rng, 0.6, 2.2),
-        tgt.pose.pos[2] + rand(this.rng, -0.3, 0.6),
-      ];
+      // B13: most covering fire is put ONTO the column the target is using,
+      // not merely near him, so the facing of the columns the fight is fought
+      // around is actually destroyed rather than lightly scuffed. The
+      // remainder still sprays around his position, which keeps the rest of
+      // the hall marked without flattening the contrast between the columns
+      // that saw fire and the ones that did not.
+      const def = TL.SOLDIERS.find((d) => d.id === tgt.id);
+      const col = def ? COLUMNS[def.colIndex] : null;
+      if (col && this.rng() < 0.85) {
+        const half = COLUMN.size / 2;
+        // pick the column face turned toward the shooter
+        const dx = shooter.pose.pos[0] - col.x;
+        const dz = shooter.pose.pos[2] - col.z;
+        if (Math.abs(dx) > Math.abs(dz)) {
+          aimPoint = [
+            col.x + Math.sign(dx) * half,
+            rand(this.rng, 0.5, 2.5),
+            col.z + rand(this.rng, -half, half),
+          ];
+        } else {
+          aimPoint = [
+            col.x + rand(this.rng, -half, half),
+            rand(this.rng, 0.5, 2.5),
+            col.z + Math.sign(dz) * half,
+          ];
+        }
+      } else {
+        aimPoint = [
+          tgt.pose.pos[0] + rand(this.rng, -0.9, 0.9),
+          rand(this.rng, 0.6, 2.2),
+          tgt.pose.pos[2] + rand(this.rng, -0.3, 0.6),
+        ];
+      }
     }
 
     const dir = norm(sub(aimPoint, muzzle));
@@ -609,9 +796,33 @@ export class World {
 
   // -------------------------------------------------------- destruction ---
 
-  private applyImpact(surface: string, pos: V3, normal: V3, chew = false) {
+  /**
+   * B18: the axis the ejecta leave along — the incoming round reflected off
+   * the face, then biased back toward the normal so the cone comes AWAY from
+   * the surface rather than skimming along it.
+   */
+  private ejectAxis(dir: V3 | null, normal: V3): V3 {
+    if (!dir) return [...normal];
+    const d = dir[0] * normal[0] + dir[1] * normal[1] + dir[2] * normal[2];
+    const rx = dir[0] - 2 * d * normal[0];
+    const ry = dir[1] - 2 * d * normal[1];
+    const rz = dir[2] - 2 * d * normal[2];
+    const ex = rx + normal[0] * 0.9, ey = ry + normal[1] * 0.9, ez = rz + normal[2] * 0.9;
+    const L = Math.hypot(ex, ey, ez) || 1;
+    return [ex / L, ey / L, ez / L];
+  }
+
+  /** B18: throw a full cone of material, in three size classes at once. */
+  private ejectCone(pos: V3, normal: V3, axis: V3, power: number, counts: [number, number, number]) {
+    for (let c = 0 as 0 | 1 | 2; c < 3; c++) {
+      for (let i = 0; i < counts[c]; i++) this.spawnDebris(pos, normal, axis, power, c as 0 | 1 | 2);
+    }
+  }
+
+  private applyImpact(surface: string, pos: V3, normal: V3, chew = false, dir: V3 | null = null) {
     if (surface === 'floor') {
-      for (let i = 0; i < 2; i++) this.spawnDebris(pos, normal, 0.6);
+      // a round skipping off the polished floor throws less, and flatter
+      this.ejectCone(pos, normal, this.ejectAxis(dir, normal), 0.7, [10, 3, 1]);
       this.emit({ type: 'IMPACT_MARBLE', t: this.t, surface, pos: [...pos], normal: [...normal] });
       return;
     }
@@ -623,7 +834,7 @@ export class World {
       const dx = d.pos[0] - pos[0], dy = d.pos[1] - pos[1], dz = d.pos[2] - pos[2];
       if (dx * dx + dy * dy + dz * dz < 0.36) nearby++;
     }
-    const crater = nearby >= 3 || chew;
+    const crater = nearby >= 2 || chew;
     const size = crater ? rand(this.rng, 0.3, 0.48) : rand(this.rng, 0.13, 0.22);
 
     // B8: take a real chunk of cladding off. A first hit knocks a palm-sized
@@ -633,13 +844,12 @@ export class World {
     // whole missing tiles.
     const slab = this.slabFor(surface, normal);
     let strippedCells = 0;
-    if (slab) {
-      const [lu, lv] = localOf(slab, pos);
-      const radius = crater ? rand(this.rng, 0.1, 0.16) : rand(this.rng, 0.045, 0.075);
-      const seed = (Math.round(lu * 131) ^ Math.round(lv * 197)) | 0;
-      strippedCells = stripChunk(slab, lu, lv, radius, seed);
-    }
-    // Keep the decal fully on the surface face (no floating past edges).
+
+    // Keep the mark fully on the surface face (no floating past edges). This
+    // is done BEFORE the layer decision, not after: the clamp can move a mark
+    // near an edge off the very cell that was stripped, and a mark whose
+    // recorded position disagrees with the cell it was classified from is a
+    // mark the renderer will clip against the wrong grid square.
     const surf = this.surfaces.find((s) => s.id === surface);
     const cpos: V3 = [...pos];
     if (surf) {
@@ -649,39 +859,299 @@ export class World {
         cpos[ax] = Math.min(surf.max[ax] - m, Math.max(surf.min[ax] + m, cpos[ax]));
       }
     }
+
+    // B16/B20: which layer did this round actually hit, and does the facing
+    // survive it?
+    //
+    // Before this, every impact stripped its own cell, so every mark sat on
+    // exposed core and a spall crater in polished stone was unreachable. Now a
+    // round landing on virgin facing may simply pock it: the stone stays and
+    // the mark is a facing mark. A worked-over spot or a deliberate chew burst
+    // still takes a chunk out, and repeat fire still merges chunks into whole
+    // missing tiles, so B13's "far too little damage" is not undone — the
+    // spall path only ever applies to an isolated FIRST hit.
+    let layer: 'facing' | 'core' = 'core';
+    let su = 0, sv = 0;
+    if (slab) {
+      const [lu, lv] = localOf(slab, cpos);
+      su = lu / (slab.w * cellSize);
+      sv = lv / (slab.h * cellSize);
+      const onCore = isStripped(slab, lu, lv);
+      {
+        const radius = crater ? rand(this.rng, 0.30, 0.50) : rand(this.rng, 0.13, 0.24);
+        const seed = (Math.round(lu * 131) ^ Math.round(lv * 197)) | 0;
+        strippedCells = stripChunk(slab, lu, lv, radius, seed);
+        // B16/B20: the mark describes whatever the round actually struck, and
+        // that is decided AFTER the damage is applied. If the facing survived
+        // the hit it keeps a spall scar; if this hit is the one that took the
+        // chunk, the facing there no longer exists and the mark is a core
+        // pock. No coin flip decides it — accumulation does.
+        layer = isStripped(slab, lu, lv) ? 'core' : 'facing';
+        // B19: once enough of a tile is gone, the remainder lets go in one
+        // piece rather than being nibbled away cell by cell
+        const rel = releaseTile(slab, lu, lv, seed);
+        if (rel) {
+          strippedCells += rel.stripped;
+          this.dropTile(slab, rel);
+        }
+      }
+    }
     // B8: a crater is no longer painted on — the cladding is actually gone
     // there. Only small bullet holes in intact facing remain as decals.
     this.decals.push({
       surface, pos: cpos, normal: [...normal],
-      size: crater ? size * 0.42 : size,
+      // B13 supplement: this is a POCK in the exposed core, not a painted-on
+      // crater. The cladding chunk is really gone (stripChunk above), so all
+      // that belongs here is the small pit the round itself punched — a few
+      // centimetres, not the palm-sized disc the pre-B8 decal used to be.
+      size: crater ? size * 0.2 : size * 0.32,
+      layer, slab: slab?.id ?? '', su, sv,
       kind: 'hole',
       rot: rand(this.rng, 0, Math.PI * 2),
     });
     // Debris is sized to what actually went missing from the wall: roughly
     // one visible fragment per 40 cm2 of stripped cladding, plus the usual
     // dust-and-chips from the impact itself.
+    // B18: every round that bites stone is an ejection event, not a puff.
+    // Taking cladding off throws markedly more and larger material than a hit
+    // on already-exposed core, and the flake count still scales with how much
+    // facing actually went missing.
     const chunkArea = strippedCells * cellArea;
-    const n = 3 + randInt(this.rng, 3) + Math.min(9, Math.round(chunkArea / 0.004));
-    for (let i = 0; i < n; i++) this.spawnDebris(pos, normal, 1);
+    const extraFlakes = Math.min(6, Math.round(chunkArea / 0.012));
+    // A15 supplement: doubling the squad roughly doubled the round count into
+    // the stone (317 impacts to 525), which pushed the fragment pool into its
+    // recycle path. The per-impact cone is trimmed rather than the cap simply
+    // raised without limit — a single hit still throws real material, and the
+    // aggregate under sustained fire is what the storm needs.
+    const counts: [number, number, number] = strippedCells > 0
+      ? [15, 6, 2 + extraFlakes]
+      : layer === 'core' ? [9, 3, 1] : [8, 2, 1];
+    this.ejectCone(pos, normal, this.ejectAxis(dir, normal), strippedCells > 0 ? 1.15 : 0.85, counts);
     this.emit({ type: 'IMPACT_MARBLE', t: this.t, surface, pos: [...pos], normal: [...normal] });
     if (this.rng() < 0.22) this.emit({ type: 'RICOCHET', t: this.t, pos: [...pos] });
   }
 
-  private spawnDebris(pos: V3, normal: V3, power: number) {
+  /**
+   * B18: how much material a single round throws.
+   *
+   * The pool is capped, and the policy at the cap is deliberate: recycle the
+   * oldest AIRBORNE piece, never one that has come to rest. The persistence
+   * contract stands — what has landed stays landed. If every slot is occupied
+   * by a resting piece the spawn is dropped and counted, so a silently
+   * saturated pool cannot make the effect weaker exactly when it should be
+   * strongest; `debrisDropped` is checked in the tests.
+   */
+  private recycleAt = 0;
+  debrisDropped = 0;
+
+  private pushDebris(d: Debris) {
+    if (this.debris.length < MAX_DEBRIS_SIM) { this.debris.push(d); return; }
+    // rolling scan for the oldest airborne slot, amortised O(1)
+    for (let i = 0; i < MAX_DEBRIS_SIM; i++) {
+      const k = (this.recycleAt + i) % MAX_DEBRIS_SIM;
+      if (!this.debris[k].resting) {
+        this.debris[k] = d;
+        this.recycleAt = (k + 1) % MAX_DEBRIS_SIM;
+        return;
+      }
+    }
+    this.debrisDropped++;
+  }
+
+  /** Per size class: size range, ejection speed multiplier, spin range. */
+  private static readonly DEBRIS_CLS: [number, number, number, number][] = [
+    [0.012, 0.030, 1.55, 26], // fine grit: fast, light, sprays wide
+    [0.032, 0.068, 1.10, 16], // gravel chip
+    [0.075, 0.150, 0.75, 9],  // larger flake: heavy, slower, tumbles
+  ];
+
+  private spawnDebris(pos: V3, normal: V3, eject: V3, power: number, cls: 0 | 1 | 2) {
     const r = this.rng;
-    this.debris.push({
+    const [lo, hi, spd, spin] = World.DEBRIS_CLS[cls];
+    // cone about the ejection axis: tight for the heavy flakes, wide for grit
+    const spread = cls === 0 ? 0.95 : cls === 1 ? 0.6 : 0.38;
+    const v = rand(r, 2.6, 7.4) * spd * power;
+    this.pushDebris({
       pos: [pos[0] + normal[0] * 0.05, pos[1] + normal[1] * 0.05 + 0.02, pos[2] + normal[2] * 0.05],
       vel: [
-        normal[0] * rand(r, 1.2, 3.2) * power + rand(r, -1.1, 1.1),
-        normal[1] * rand(r, 0.5, 1.5) + rand(r, 0.6, 2.4),
-        normal[2] * rand(r, 1.2, 3.2) * power + rand(r, -1.1, 1.1),
+        eject[0] * v + rand(r, -v, v) * spread,
+        eject[1] * v + rand(r, -v * 0.4, v) * spread + rand(r, 0.4, 1.6),
+        eject[2] * v + rand(r, -v, v) * spread,
       ],
-      spin: [rand(r, -12, 12), rand(r, -12, 12), rand(r, -12, 12)],
+      spin: [rand(r, -spin, spin), rand(r, -spin, spin), rand(r, -spin, spin)],
       angle: [rand(r, 0, 3), rand(r, 0, 3), rand(r, 0, 3)],
-      size: rand(r, 0.035, 0.11),
+      size: rand(r, lo, hi),
       kind: randInt(r, 3),
-      resting: false, bounces: 0,
+      resting: false, bounces: 0, cls,
     });
+  }
+
+  /** B19: turn a released tile into a falling body. */
+  private dropTile(slab: Slab, rel: { u0: number; v0: number; size: number }, gag = false) {
+    const r = this.rng;
+    const cu = rel.u0 + rel.size / 2;
+    const cv = rel.v0 + rel.size / 2;
+    const pos: V3 = [slab.origin[0], slab.origin[1] + cv, slab.origin[2]];
+    if (slab.uAxis === 0) pos[0] += cu; else pos[2] += cu;
+    // stand it just clear of the face it came off
+    const n = slab.sign;
+    if (slab.axis === 0) pos[0] += n * 0.05; else pos[2] += n * 0.05;
+
+    this.tileSlabs.push({
+      pos,
+      // it is pushed off the wall and drops; heavy, so barely any lateral
+      // speed compared with a chip
+      // A13: the closing tile is not blown off by a round — it gives way on
+      // its own. It starts from rest and tips away from the column rather than
+      // being punched off it, which is both what the beat asks for and what
+      // gives the eye time to find it.
+      vel: gag
+        ? [
+          (slab.axis === 0 ? n * 0.32 : 0),
+          0.12,
+          (slab.axis === 2 ? n * 0.32 : 0),
+        ]
+        : [
+          (slab.axis === 0 ? n * rand(r, 0.5, 1.2) : rand(r, -0.35, 0.35)),
+          rand(r, -0.4, 0.35),
+          (slab.axis === 2 ? n * rand(r, 0.5, 1.2) : rand(r, -0.35, 0.35)),
+        ],
+      // start facing the way its face did, then tumble from there
+      angle: [0, slab.axis === 0 ? n * Math.PI / 2 : (n > 0 ? 0 : Math.PI), 0],
+      // slow tumble: a slab turns over lazily, it does not spin like a chip.
+      // The gag tile tips about the horizontal axis away from the wall.
+      spin: gag
+        ? (slab.axis === 0 ? [0, 0, -n * 2.6] : [n * 2.6, 0, 0])
+        : [rand(r, -2.2, 2.2), rand(r, -1.4, 1.4), rand(r, -2.2, 2.2)],
+      size: rel.size,
+      thickness: 0.026,
+      axis: slab.axis === 1 ? 2 : (slab.axis as 0 | 2),
+      sign: slab.sign,
+      born: this.t,
+      landed: false,
+    });
+    this.emit({ type: 'SLAB_RELEASE', t: this.t, pos: [...pos] });
+  }
+
+  /**
+   * B19: fall, then shatter on the floor into several angular pieces that
+   * scatter and come to rest. Those pieces persist like all other debris.
+   */
+  private stepTileSlabs(dt: number) {
+    const G = -11.5;
+    for (const s of this.tileSlabs) {
+      if (s.landed) continue;
+      // heavier than a chip: a steeper fall, and air does less to it
+      s.vel[1] += G * 1.35 * dt;
+      s.pos[0] += s.vel[0] * dt;
+      s.pos[1] += s.vel[1] * dt;
+      s.pos[2] += s.vel[2] * dt;
+      s.angle[0] += s.spin[0] * dt;
+      s.angle[1] += s.spin[1] * dt;
+      s.angle[2] += s.spin[2] * dt;
+      if (s.pos[1] > s.thickness || s.vel[1] >= 0) continue;
+
+      s.pos[1] = s.thickness;
+      s.landed = true;
+      // did it come down on bare marble or on a pile of rubble already there?
+      let rubble = 0;
+      for (const d of this.debris) {
+        if (!d.resting) continue;
+        const dx = d.pos[0] - s.pos[0], dz = d.pos[2] - s.pos[2];
+        if (dx * dx + dz * dz < 0.36) { rubble++; if (rubble > 6) break; }
+      }
+      this.emit({
+        type: 'SLAB_LAND', t: this.t, pos: [...s.pos], onRubble: rubble > 6,
+      });
+      // it breaks into several smaller angular pieces
+      const pieces = 5 + randInt(this.rng, 4);
+      for (let i = 0; i < pieces; i++) {
+        const a = rand(this.rng, 0, Math.PI * 2);
+        const v = rand(this.rng, 0.7, 2.6);
+        this.pushDebris({
+          pos: [
+            s.pos[0] + rand(this.rng, -s.size * 0.4, s.size * 0.4),
+            s.thickness + 0.02,
+            s.pos[2] + rand(this.rng, -s.size * 0.4, s.size * 0.4),
+          ],
+          vel: [Math.cos(a) * v, rand(this.rng, 0.6, 2.2), Math.sin(a) * v],
+          spin: [rand(this.rng, -7, 7), rand(this.rng, -7, 7), rand(this.rng, -7, 7)],
+          angle: [rand(this.rng, 0, 3), rand(this.rng, 0, 3), rand(this.rng, 0, 3)],
+          // fragments of a slab are big — clearly slab wreckage among chips
+          size: rand(this.rng, 0.12, 0.26),
+          kind: randInt(this.rng, 3),
+          resting: false, bounces: 0, cls: 2,
+        });
+      }
+      // plus a burst of grit and dust off the break
+      this.ejectCone(s.pos, [0, 1, 0], [0, 1, 0], 1.3, [18, 6, 0]);
+      this.emit({
+        type: 'IMPACT_MARBLE', t: this.t, surface: 'floor',
+        pos: [...s.pos], normal: [0, 1, 0],
+      });
+    }
+  }
+
+  /**
+   * B21: the wall or column face immediately behind a figure, so a knock-back
+   * can punch dust and chips out of the stone it drives him into. Returns the
+   * nearest destructible face within reach, or null if he is in the open.
+   */
+  private slabBehind(pos: V3): { surface: string; pos: V3; normal: V3; dir: V3 } | null {
+    let best: { surface: string; pos: V3; normal: V3; dir: V3 } | null = null;
+    let bestD = 1.4;
+    for (const s of this.surfaces) {
+      for (const ax of [0, 2] as const) {
+        for (const sign of [1, -1] as const) {
+          const plane = sign > 0 ? s.max[ax] : s.min[ax];
+          const d = (pos[ax] - plane) * sign;
+          if (d < 0 || d > bestD) continue;
+          // the hit point has to actually lie on the face
+          const other = ax === 0 ? 2 : 0;
+          if (pos[other] < s.min[other] - 0.1 || pos[other] > s.max[other] + 0.1) continue;
+          const hp: V3 = [pos[0], 1.15, pos[2]];
+          hp[ax] = plane + sign * 0.01;
+          const n: V3 = [0, 0, 0];
+          n[ax] = sign;
+          const dir: V3 = [0, 0, 0];
+          dir[ax] = -sign;
+          bestD = d;
+          best = { surface: s.id, pos: hp, normal: n, dir };
+        }
+      }
+    }
+    return best;
+  }
+
+  /**
+   * B28: which guard a strike actually connects with.
+   *
+   * Within arm's reach only — a first pass allowed anyone within 3.2 m and
+   * duly registered a punch landing on a guard 2.9 m away across the
+   * checkpoint. A guard who went down in the last third of a second still
+   * counts, because a second blow in a combination lands while the first has
+   * him falling; without that the follow-up strikes are silent again.
+   */
+  private nearestGuardTo(actorId: string, t: number): string | null {
+    // Evaluated at the CONTACT time, not at the swing. The poses are pure
+    // functions of time, so the future position is knowable — and it has to
+    // be: the flying kick launches 2.05 m from its target and connects at
+    // 1.0 m, so judging the range at launch put it out of reach and left the
+    // kick silent, which is the defect this whole change is about.
+    const ap = actorId === 'neo' ? TL.neoPose(t) : TL.trinPose(t);
+    let best: string | null = null;
+    let bestD = 1.8;
+    for (const g of this.actors.values()) {
+      if (g.role !== 'guard') continue;
+      const death = TL.DEATHS[g.id];
+      if (death !== undefined && t - death > 0.35) continue;
+      const gp = TL.guardPose(g.id, t);
+      const dx = gp.pos[0] - ap.pos[0];
+      const dz = gp.pos[2] - ap.pos[2];
+      const d = Math.hypot(dx, dz);
+      if (d < bestD) { bestD = d; best = g.id; }
+    }
+    return best;
   }
 
   private spawnCasing(muzzle: V3, yaw: number) {
@@ -752,6 +1222,7 @@ export class World {
         }
       }
     }
+    this.stepTileSlabs(dt);
     for (const g of this.droppedGuns) {
       if (g.resting) continue;
       g.vel[1] += G * dt;

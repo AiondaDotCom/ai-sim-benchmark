@@ -1,3 +1,4 @@
+import { settleClearOfSet, nearestSurfaceContact } from './layout';
 /**
  * The choreography: a fixed, deterministic script of the whole scene.
  * Every actor's position/action is a pure function of simulation time.
@@ -20,6 +21,69 @@ import { V3, lerp, clamp, smooth } from './math3';
 
 export const DURATION = 60;
 
+/**
+ * A13: which face the closing tile comes off.
+ *
+ * The final wide sits at the entrance end (x ~ 1.8, z ~ 12) looking down the
+ * hall, so the near column on the right is the one the eye is already on, and
+ * its INWARD face is the one turned toward that camera. Chosen by measurement
+ * rather than by guess: at t=55 that face has four tiles eroded into the
+ * loose-but-not-gone band, the most of any face the closing shot can see. The
+ * obvious first guess, the near column's +z face, turned out to take no fire
+ * at all during the fight.
+ */
+/**
+ * A15: the deployment beat.
+ *
+ * The squad floods in and fans out to cover, the leader shouts one word, and
+ * then there is a genuine pause before the pair move. The whole beat is fitted
+ * INTO the existing 14-19 s window rather than inserted, so no time is added:
+ * the music is a single track played against simulation time, so stretching
+ * the sequence anywhere would slide the drop. The kill order (DEATHS) and
+ * every beat from 20.3 onward are untouched.
+ */
+export const DEPLOY_T0 = 14.0;
+/** The last man is in cover; the leader shouts. */
+export const COMMAND_T = 17.65;
+/** Held standoff: weapons trained, nobody fires. */
+export const STANDOFF: [number, number] = [17.7, 18.95];
+/** The break — the man fires and moves in the same instant. */
+export const BREAK_T = 19.0;
+
+/**
+ * B26: the closing gag has to happen ON CAMERA.
+ *
+ * The face was previously chosen from the damage data — most tiles in the
+ * loose-but-not-gone band among the faces the closing camera can see — and the
+ * tile that fell turned out to be in the cluttered gap between the two
+ * right-hand columns: occluded, distant and unreadable. A gag nobody sees is
+ * not a gag.
+ *
+ * Chosen from the FRAME instead. Measured against the actual closing camera by
+ * projecting every cladding face and then confirming visually with a tint
+ * pass: the near-left column presents both of its camera-facing sides fully in
+ * shot and unobstructed. Its +z side is the wider of the two but takes no
+ * aimed fire all fight — no defender uses column 1 as cover — so it ends the
+ * sequence undamaged and has nothing to drop. Its +x side is narrower in frame
+ * but still squarely visible, is chewed to 24.6% by the fight as it stands,
+ * and carries a loose tile at v = 2.48 m: the upper-middle of the column,
+ * which is exactly where the eye is directed.
+ *
+ * So the order below is a frame-visibility ranking, not a damage ranking. The
+ * camera did not have to move and no fire had to be staged to make it happen.
+ */
+/**
+ * B28: melee timing. A punch lands essentially on its cue; a flying kick
+ * leaves the ground well before it connects — measured, the kick cue at 13.15
+ * still has 1.9 m to cross and does not reach the guard until 13.30. The
+ * reaction then follows the impact rather than sharing a frame with it.
+ */
+export const STRIKE_CONTACT_DELAY = 0.02;
+export const KICK_CONTACT_DELAY = 0.15;
+export const MELEE_REACT_DELAY = 0.11;
+
+export const GAG_SLAB = ['col1#px', 'col0#px', 'col4#nx', 'col4#nz', 'col5#nx'];
+
 export interface Pose {
   pos: V3;
   yaw: number;
@@ -34,25 +98,37 @@ export const DEATHS: Record<string, number> = {
   g0: 12.6, g1: 13.3, g2: 14.0,
   s0: 20.3, s1: 21.2, s2: 26.2, s3: 27.4,
   s4: 31.8, s5: 34.5, s6: 37.5, s7: 39.8,
+  // A15 supplement: the squad is roughly doubled so the deployment fills the
+  // frame and the fight has enough bodies to sustain the advance. The extra
+  // eight are interleaved into the SAME window — the last man still goes down
+  // at 39.8, so the wind-down and everything after it are untouched.
+  s8: 22.0, s9: 23.4, s10: 24.6, s11: 28.6,
+  s12: 30.4, s13: 33.0, s14: 35.8, s15: 38.6,
 };
 
-export const DEATH_STYLE: Record<string, 'crumple' | 'slide' | 'drop'> = {
+export const DEATH_STYLE: Record<string, 'crumple' | 'slide' | 'drop' | 'knockback' | 'sprawl'> = {
   g0: 'crumple', g1: 'drop', g2: 'crumple',
   s0: 'slide', s1: 'crumple', s2: 'drop', s3: 'crumple',
-  s4: 'slide', s5: 'crumple', s6: 'drop', s7: 'crumple',
+  // B21: the last man takes the bullet-cam round and is thrown into the
+  // stone behind him — his own reaction, distinct from the other three
+  s4: 'slide', s5: 'crumple', s6: 'drop', s7: 'knockback',
+  s8: 'drop', s9: 'slide', s10: 'crumple', s11: 'drop',
+  s12: 'crumple', s13: 'slide', s14: 'drop', s15: 'slide',
 };
 
 /** Which protagonist's shot kills each soldier (guards die to melee). */
 export const KILLERS: Record<string, 'neo' | 'trin'> = {
   s0: 'neo', s1: 'neo', s2: 'trin', s3: 'trin',
   s4: 'neo', s5: 'trin', s6: 'neo', s7: 'trin',
+  s8: 'trin', s9: 'neo', s10: 'neo', s11: 'trin',
+  s12: 'neo', s13: 'trin', s14: 'trin', s15: 'neo',
 };
 
 // ------------------------------------------------------------- slow-mo -----
 
 interface SlowmoWindow { t0: number; t1: number; scale: number }
 export const SLOWMO: SlowmoWindow[] = [
-  { t0: 15.06, t1: 15.3, scale: 0.05 }, // A5: muzzle-exit insert
+  { t0: 18.96, t1: 19.16, scale: 0.05 }, // A5: muzzle-exit insert, on the A15 break
   { t0: 19.2, t1: 20.05, scale: 0.18 },
   // A5/A7: casing close-up, held until the followed casing has bounced
   // to rest on the marble (it settles at t=21.95).
@@ -60,9 +136,17 @@ export const SLOWMO: SlowmoWindow[] = [
   { t0: 23.45, t1: 24.15, scale: 0.12 }, // A5: bullet-dodge set piece
   { t0: 25.35, t1: 26.25, scale: 0.2 },
   { t0: 31.5, t1: 32.3, scale: 0.2 },
-  // A7: bullet-cam on the last kill. The round crosses 4.5 m in 50 ms of
-  // sim time, so the window is scaled to give it ~3 s of screen time.
-  { t0: 39.69, t1: 39.762, scale: 0.022 },
+  // A7/B21: bullet-cam on the last kill.
+  //
+  // The round crosses 4.4 m in 50 ms of sim time. The old single window began
+  // at 39.69 and ended at 39.762, which is BEFORE the round lands — so the
+  // ride was over in 38 ms of sim and the shot had already cut wide by 39.74,
+  // which is exactly the frame the defect report captured. It now opens
+  // earlier, so the round is seen leaving the muzzle, and runs through the
+  // impact; the second window carries the knock-back at a lighter scale so the
+  // hit reads without the beat dragging.
+  { t0: 39.63, t1: 39.80, scale: 0.03 },
+  { t0: 39.80, t1: 39.99, scale: 0.10 },
 ];
 const EASE = 0.18;
 
@@ -90,9 +174,10 @@ export const CUES: Cue[] = [
   { t: 10.5, type: 'VO', line: 'vo_checkpoint_2' },
   { t: 12.0, type: 'VO', line: 'vo_hands' },
   { t: 13.55, type: 'VO', line: 'vo_radio_backup' },
-  { t: 15.2, type: 'VO', line: 'vo_go' },
-  { t: 16.9, type: 'VO', line: 'vo_takecover' },
-  { t: 18.5, type: 'VO', line: 'vo_leftflank' },
+  { t: 14.6, type: 'VO', line: 'vo_go' },
+  { t: 17.65, type: 'VO', line: 'vo_freeze' },
+  { t: 15.6, type: 'VO', line: 'vo_takecover' },
+  { t: 16.6, type: 'VO', line: 'vo_leftflank' },
   { t: 24.6, type: 'VO', line: 'vo_reloading' },
   { t: 27.6, type: 'VO', line: 'vo_column' },
   { t: 41.8, type: 'VO', line: 'vo_lobbypost' },
@@ -134,6 +219,9 @@ export const CUES: Cue[] = [
   { t: 39.0, type: 'DRAW', actor: 'neo' },
   { t: 46.6, type: 'HOLSTER' },
   { t: 51.5, type: 'ELEVATOR' },
+  // A13: the closing gag. The hall is empty and quiet; one last loosened tile
+  // gives way on its own, falls and shatters, and then it is quiet again.
+  { t: 55.4, type: 'TILE_GAG' },
   // The cue loop walks this list with a monotonic index, so it MUST be sorted
   // by time. Sorting here rather than relying on the literal being in order:
   // inserting the A10 voice lines out of order silently stopped every later
@@ -191,9 +279,12 @@ export const VO_LINES: {
   // radio call on the alarm
   { line: 'vo_radio_backup', t: 13.55, beat: [13.5, 18.0], radio: true, duck: 0.2 },
   // reinforcements storming in (first soldier enters at 14.0)
-  { line: 'vo_go', t: 15.2, beat: [14.0, 19.0], radio: false, duck: 0 },
-  { line: 'vo_takecover', t: 16.9, beat: [14.0, 19.0], radio: false, duck: 0 },
-  { line: 'vo_leftflank', t: 18.5, beat: [14.0, 19.0], radio: false, duck: 0 },
+  { line: 'vo_go', t: 14.6, beat: [14.0, 19.0], radio: false, duck: 0 },
+  { line: 'vo_takecover', t: 15.6, beat: [14.0, 19.0], radio: false, duck: 0 },
+  { line: 'vo_leftflank', t: 16.6, beat: [14.0, 19.0], radio: false, duck: 0 },
+  // A15: one word, shouted, and then silence. It ducks the music hard because
+  // the held beat after it is the point — the command has to land clean.
+  { line: 'vo_freeze', t: 17.65, beat: [14.0, 19.0], radio: false, duck: 0.88 },
   // mid-fight
   { line: 'vo_reloading', t: 24.6, beat: [19.0, 39.8], radio: false, duck: 0 },
   { line: 'vo_column', t: 27.6, beat: [19.0, 39.8], radio: false, duck: 0 },
@@ -480,16 +571,37 @@ export const SOLDIERS: SoldierDef[] = [
   { id: 's5', door: [6.8, -17.3], cover: [2.45, -10.75], colIndex: 7, leanSign: -1, enterT: 15.0 },
   { id: 's6', door: [-6.8, -17.3], cover: [-4.55, -10.75], colIndex: 3, leanSign: -1, enterT: 15.2 },
   { id: 's7', door: [6.8, -17.3], cover: [4.55, -10.75], colIndex: 7, leanSign: 1, enterT: 15.4 },
+  // A15 supplement: the second half of the squad. Their cover is BEHIND and
+  // outboard of the first rank rather than in front of it — a forward rank
+  // would have put men between the two protagonists and put the no-friendly-
+  // fire invariant at risk for the sake of a wider spread.
+  { id: 's8', door: [-6.8, -17.3], cover: [-2.45, -7.75], colIndex: 3, leanSign: 1, enterT: 14.1 },
+  { id: 's9', door: [6.8, -17.3], cover: [2.45, -7.75], colIndex: 7, leanSign: -1, enterT: 14.3 },
+  { id: 's10', door: [-6.8, -17.3], cover: [-4.55, -7.75], colIndex: 3, leanSign: -1, enterT: 14.5 },
+  { id: 's11', door: [6.8, -17.3], cover: [4.55, -7.75], colIndex: 7, leanSign: 1, enterT: 14.7 },
+  { id: 's12', door: [-6.8, -17.3], cover: [-6.3, -4.75], colIndex: 2, leanSign: -1, enterT: 14.15 },
+  { id: 's13', door: [6.8, -17.3], cover: [6.3, -4.75], colIndex: 6, leanSign: 1, enterT: 14.35 },
+  { id: 's14', door: [-6.8, -17.3], cover: [-6.3, -10.75], colIndex: 3, leanSign: -1, enterT: 14.55 },
+  { id: 's15', door: [6.8, -17.3], cover: [6.3, -10.75], colIndex: 7, leanSign: 1, enterT: 14.75 },
 ];
 
 /** Deterministic burst start times for a soldier (while alive). */
 export function soldierBursts(def: SoldierDef): number[] {
   const death = DEATHS[def.id];
   const idx = SOLDIERS.indexOf(def);
-  const start = 16.4 + idx * 0.31;
+  // A15: no defender fires before the break. The squad deploys, the command
+  // lands, the standoff holds, and the shooting starts when the pair move.
+  const start = BREAK_T + 0.15 + idx * 0.09;
   const period = 2.1 + (idx % 3) * 0.27;
   const out: number[] = [];
-  for (let t = start; t < Math.min(death - 0.25, 40); t += period) out.push(t);
+  for (let t = start; t < Math.min(death - 0.25, 40); t += period) {
+    // A man sprinting between cover is not putting rounds on target, and
+    // firing through that transition is where the last soldier's barrel came
+    // off its own line (B6 measures exactly that). s7 breaks cover for the
+    // final assault at 38.6 and is set again by 39.3.
+    if (def.id === 's7' && t > 38.5 && t < 39.45) continue;
+    out.push(t);
+  }
   return out;
 }
 
@@ -503,6 +615,18 @@ function soldierLivePose(def: SoldierDef, t: number): Pose {
     if (t < 39.3) return walkPose(t, 38.6, 39.3, def.cover, [3.2, -9.2], 'run');
     return { pos: [3.2, 0, -9.2], yaw: FACE_DOOR, action: 'cover', phase: 1, speed: 0 };
   }
+  // A15: the held standoff. Weapons are UP and trained on the pair, not
+  // stowed behind cover — at lean phase 0 the aim swivel is skipped entirely
+  // and the squad would hold the beat pointing at the floor. A settled
+  // half-lean puts the weapons on target without anyone leaning out to fire.
+  if (t >= STANDOFF[0] && t <= STANDOFF[1]) {
+    const settle = smooth(STANDOFF[0], STANDOFF[0] + 0.35, t);
+    return {
+      pos: [def.cover[0], 0, def.cover[1]], yaw: FACE_DOOR,
+      action: 'cover', phase: 0.28 + 0.32 * settle, speed: 0,
+    };
+  }
+
   // In cover, crouched; lean out around burst times.
   let lean = 0;
   for (const b of soldierBursts(def)) {
@@ -516,13 +640,75 @@ function soldierLivePose(def: SoldierDef, t: number): Pose {
 
 // --------------------------------------------------------- death overlay ---
 
+/** How far a body may be moved to justify a `slide` (B29). */
+const SLIDE_SNAP = 0.75;
+/** Poses that make sense with nothing behind the body. */
+const OPEN_FALLS = ['sprawl', 'crumple', 'drop'];
+/**
+ * Avalanche-mixed, because the obvious h*31 accumulator maps consecutive ids
+ * to adjacent values: s9, s13 and s15 all landed on the same two buckets mod
+ * 3 and the sprawl pose was never selected at all, which defeats the point of
+ * having a third.
+ */
+const hashId = (s: string) => {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  h ^= h >>> 15;
+  h = Math.imul(h, 0x2c1b3c6d);
+  h ^= h >>> 12;
+  return h | 0;
+};
+
 function applyDeath(id: string, t: number, live: (tt: number) => Pose): Pose {
   const death = DEATHS[id];
   if (death === undefined || t < death) return live(t);
   const style = DEATH_STYLE[id];
   const base = live(death - 0.001);
   const k = clamp((t - death) / 1.1, 0, 1);
-  return { ...base, action: `fall_${style}`, phase: k, speed: 0 };
+  // B28: a body settles AGAINST the set, never inside it. Two of the three
+  // guards die on positions that are inside the desk footprint by
+  // construction — g0 is lunging for the desk radio when he is hit — and
+  // nothing was resolving that, so they came to rest embedded in it. The
+  // body slides clear over the same 1.1 s the fall takes, so it reads as
+  // being stopped by the desk rather than teleporting off it.
+  let [cx, cz] = settleClearOfSet(base.pos[0], base.pos[2]);
+  let yaw = base.yaw;
+  let useStyle: string = style;
+
+  // B29: `slide` describes a man sliding down a vertical surface and coming to
+  // rest seated against it. With nothing behind him it renders as sitting bolt
+  // upright in open floor, which is what all five slide-style defenders were
+  // doing — measured at 0.41 to 2.15 m from the nearest surface, because their
+  // cover positions sit diagonally off the column corner by design and were
+  // never in contact.
+  //
+  // So the pose has to earn its support. A body close enough to a surface is
+  // moved into contact with it and TURNED so its back is against it, which is
+  // what the pose assumes; one that is too far away to justify the move gets a
+  // pose that makes sense in the open instead.
+  if (style === 'slide') {
+    const c = nearestSurfaceContact(cx, cz, SLIDE_SNAP);
+    if (c) {
+      cx = c.x;
+      cz = c.z;
+      // face away from the surface, so the back is to it
+      yaw = Math.atan2(c.nx, c.nz);
+    } else {
+      // deterministic per id, so a hall of casualties is not two repeated poses
+      useStyle = OPEN_FALLS[Math.abs(hashId(id)) % OPEN_FALLS.length];
+    }
+  }
+
+  const e = k * k * (3 - 2 * k);
+  const pos: V3 = [
+    base.pos[0] + (cx - base.pos[0]) * e,
+    base.pos[1],
+    base.pos[2] + (cz - base.pos[2]) * e,
+  ];
+  return { ...base, pos, yaw, action: `fall_${useStyle}`, phase: k, speed: 0 };
 }
 
 export function guardPose(id: string, t: number): Pose {
@@ -557,14 +743,18 @@ function fillShots(
 
 function buildShotPlan(): PlannedShot[] {
   const out: PlannedShot[] = [];
-  fillShots(out, 'neo', 15.1, 18.3, 0.5, true); // first round inside the muzzle insert
-  fillShots(out, 'neo', 19.0, 20.2, 0.21, true); // cartwheel
+  // A15: the man does not fire during the deployment or the held standoff.
+  // His first round IS the break, and it lands inside the muzzle-exit insert.
+  // A15: his first round IS the break, but it is timed a beat into the move
+  // rather than on its first frame — firing on the whip of a pose transition
+  // is what produced most of the stray backwards-barrel frames B6 measures.
+  fillShots(out, 'neo', 19.12, 20.2, 0.21, true); // cartwheel
   fillShots(out, 'neo', 20.4, 21.0, 0.4, true);
   fillShots(out, 'neo', 22.8, 23.15, 0.35); // pauses for the dodge
   fillShots(out, 'neo', 24.9, 29.7, 0.62);
   fillShots(out, 'neo', 31.0, 33.3, 0.42);
   fillShots(out, 'neo', 33.6, 39.7, 0.48, true);
-  fillShots(out, 'trin', 15.3, 18.3, 0.55);
+  fillShots(out, 'trin', 19.75, 20.5, 0.3);
   fillShots(out, 'trin', 19.8, 23.3, 0.6);
   fillShots(out, 'trin', 25.0, 26.7, 0.28); // wall run
   fillShots(out, 'trin', 26.9, 27.5, 0.3);

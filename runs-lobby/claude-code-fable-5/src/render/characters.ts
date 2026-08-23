@@ -52,10 +52,58 @@ interface Rig {
 
 const HIP_Y = 0.96;
 
+/**
+ * B22: the wrist's own long axis, and how far it may roll about it.
+ *
+ * The hand extends along -Y in its local frame, so a roll about Y is the
+ * anatomically limited one. Without a limit the minimal-rotation swivel is
+ * free to wrap the wrist right round, which is the second orientation bug this
+ * subsystem has produced; ±90° from neutral is roughly the real range.
+ */
+const WRIST_AXIS = new THREE.Vector3(0, 1, 0);
+const WRIST_ROLL_MAX = Math.PI / 2;
+
+const _twist = new THREE.Quaternion();
+const _swing = new THREE.Quaternion();
+const _twAxis = new THREE.Vector3();
+
+/**
+ * Clamp the component of `q` that twists about `axis`, leaving its swing
+ * alone (swing-twist decomposition). Mutates `q`.
+ */
+export function clampTwist(q: THREE.Quaternion, axis: THREE.Vector3, maxAngle: number) {
+  _twAxis.copy(axis).multiplyScalar(q.x * axis.x + q.y * axis.y + q.z * axis.z);
+  _twist.set(_twAxis.x, _twAxis.y, _twAxis.z, q.w);
+  if (_twist.lengthSq() < 1e-12) return;
+  _twist.normalize();
+  // a quaternion and its negation are the same rotation; pick the short way
+  if (_twist.w < 0) {
+    _twist.set(-_twist.x, -_twist.y, -_twist.z, -_twist.w);
+  }
+  const ang = 2 * Math.acos(Math.min(1, _twist.w));
+  if (ang <= maxAngle) return;
+  _swing.copy(q).multiply(_twist.clone().invert());
+  const k = maxAngle / ang;
+  _twist.slerpQuaternions(_qIdent, _twist, k);
+  q.copy(_swing.multiply(_twist)).normalize();
+}
+
 // scratch objects for the per-frame gun swivel (B6) — no allocation in update
 const _qChain = new THREE.Quaternion();
 const _qDelta = new THREE.Quaternion();
 const _qIdent = new THREE.Quaternion();
+const _qChainInv = new THREE.Quaternion();
+const _qRoll = new THREE.Quaternion();
+const _vBarrel = new THREE.Vector3();
+const _vDown = new THREE.Vector3();
+const _vGrip = new THREE.Vector3();
+const _vA = new THREE.Vector3();
+const _vB = new THREE.Vector3();
+const _vX = new THREE.Vector3();
+const _qRel = new THREE.Quaternion();
+const _qRestInv = new THREE.Quaternion();
+const _box = new THREE.Box3();
+const _boxTmp = new THREE.Box3();
 const _vWant = new THREE.Vector3();
 const _vLocal = new THREE.Vector3();
 const _vCur = new THREE.Vector3();
@@ -65,8 +113,18 @@ const _vCur = new THREE.Vector3();
  * must track the aim point rather than follow the arm's staging (B6).
  * Value = how far the wrist may swivel to get there, in radians.
  */
+/**
+ * How far the wrist may swivel to put the barrel on the round, per pose.
+ *
+ * A15 raised the cover and advance limits. A man in cover whose body yaw is
+ * fixed toward the doors still has to bring the weapon round onto a target off
+ * to one side, and 0.7 rad (40 degrees) was not enough reach for the outboard
+ * positions or for the last soldier once he breaks cover — the barrel stayed
+ * visibly off its own round, which is precisely what B6 measures. 1.2 rad is
+ * about 69 degrees, which a crouched man leaning out of cover genuinely has.
+ */
 const GUN_TRACK: Record<string, number> = {
-  shootAdvance: 0.7, crouchFire: 0.7, coverL: 0.7, coverR: 0.7, cover: 0.7,
+  shootAdvance: 0.95, crouchFire: 0.95, coverL: 1.2, coverR: 1.2, cover: 1.2,
   lower: 0.7, dodge: 1.1, cartwheel: 1.6, wallrun: 1.6, walk: 0.9, run: 0.9,
 };
 
@@ -242,6 +300,38 @@ function coatSkirt(
   return new THREE.Mesh(geo, mat);
 }
 
+/**
+ * B22: seat a weapon in a hand so the palm is against the grip.
+ *
+ * The hand's local frame: fingers extend along -Y and curl toward +Z, so the
+ * palm faces +Z, the fist forms a tube along X, and the thumb is at -side*X
+ * (medial). A grip therefore has to pass through that tube — along X — with
+ * its bottom exiting past the little finger, which is +X on the right hand and
+ * -X on the left. Both hands used the SAME rotation before, so whatever was
+ * right for one was mirrored wrong on the other; and that rotation put the
+ * grip's long axis along hand -Z, i.e. out through the BACK of the hand. That
+ * is what reads as a hand attached upside down.
+ *
+ * Expressed as a basis rather than as euler angles so the intent is checkable:
+ *   gun -Y (down the grip)   -> hand  side*X  (out past the little finger)
+ *   gun -Z (the barrel)      -> hand -Y       (along the reach)
+ * The position then follows from putting the grip's centre in the fist.
+ */
+const GRIP_LOCAL = new THREE.Vector3(0, -0.055, 0.025);
+const FIST_CENTRE = new THREE.Vector3(0, -0.075, 0.022);
+
+export function seatWeapon(g: THREE.Object3D, side: number) {
+  const gy = new THREE.Vector3(-side, 0, 0);
+  const gz = new THREE.Vector3(0, 1, 0);
+  const gx = new THREE.Vector3().crossVectors(gy, gz);
+  g.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(gx, gy, gz));
+  g.position.copy(FIST_CENTRE).sub(GRIP_LOCAL.clone().applyQuaternion(g.quaternion));
+}
+
+/** Where the palm faces, and where the grip sits, in hand-local space. */
+export const PALM_NORMAL = new THREE.Vector3(0, 0, 1);
+export const GRIP_SEAT = FIST_CENTRE;
+
 function pistolMesh(mats: Mats): THREE.Group {
   const g = new THREE.Group();
   const slide = new THREE.Mesh(new THREE.BoxGeometry(0.032, 0.045, 0.21), mats.gunmetal);
@@ -292,11 +382,16 @@ export class Character {
   /** direction + sim time of the most recent round fired (B6) */
   private shotDir: V3 | null = null;
   private shotT = -1;
+  /** B29: cached floor lift for a settled body (recomputed while it falls). */
+  private floorLift: number | null = null;
 
   constructor(kind: CharKind, mats: Mats, scene: THREE.Object3D) {
     this.kind = kind;
     this.mats = mats;
     this.rig = this.build();
+    // named so a close shot can be checked against the lens guard without
+    // guessing which meshes are people (A16)
+    this.rig.root.name = `char:${kind}:${Character.instanceCount}`;
     scene.add(this.rig.root);
   }
 
@@ -384,8 +479,10 @@ export class Character {
     const kind = this.kind;
     const isW = kind === 'trin';
     const bodyMat = kind === 'neo' ? m.coat : kind === 'trin' ? m.latex
-      : kind === 'guard' ? m.shirt : m.darkCloth;
-    const legMat = kind === 'guard' ? m.guardTrouser : kind === 'trin' ? m.latex : m.trouser;
+      : kind === 'guard' ? m.shirt : m.fatigue;
+    const legMat = kind === 'guard' ? m.guardTrouser
+      : kind === 'trin' ? m.latex
+      : kind === 'soldier' ? m.fatigue : m.trouser;
     const skinBase = isW ? m.skinW : m.skin;
 
     // subtle deterministic per-character skin variation (no two identical eggs)
@@ -504,12 +601,14 @@ export class Character {
     }
     if (kind === 'soldier') {
       // rounded armor vest with pouches
-      const vest = new THREE.Mesh(new THREE.CapsuleGeometry(0.165, 0.16, 6, 12), m.black);
+      // A14: load-bearing vest over the fatigues, in a matching but darker
+      // green so it reads as gear rather than as more uniform
+      const vest = new THREE.Mesh(new THREE.CapsuleGeometry(0.165, 0.16, 6, 12), m.webbing);
       vest.position.y = 0.3;
       vest.scale.set(1.28, 0.95, 0.82);
       torso.add(vest);
       for (const px of [-0.06, 0.06]) {
-        const pouch = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.07, 0.035), m.darkCloth);
+        const pouch = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.07, 0.035), m.webbing);
         pouch.position.set(px, 0.22, 0.145);
         torso.add(pouch);
       }
@@ -682,12 +781,12 @@ export class Character {
       // B9: sized to sit ON the skull. At the old radius it floated as a
       // hemisphere above the (A11-narrowed) head.
       const dome = new THREE.Mesh(
-        new THREE.SphereGeometry(0.1, 18, 12, 0, Math.PI * 2, 0, Math.PI * 0.62), m.black,
+        new THREE.SphereGeometry(0.1, 18, 12, 0, Math.PI * 2, 0, Math.PI * 0.62), m.helmetGreen,
       );
       dome.position.y = 0.125;
       dome.scale.set(1.0, 1.0, 1.14);
       head.add(dome);
-      const rim = new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.013, 8, 20), m.black);
+      const rim = new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.013, 8, 20), m.helmetGreen);
       rim.rotation.x = Math.PI / 2;
       rim.position.y = 0.118;
       rim.scale.set(1.0, 1.14, 1);
@@ -727,6 +826,19 @@ export class Character {
       }
       const hand = this.buildHand(side, skin);
       hand.group.position.y = -0.285;
+      // B22: the hand rests PRONATED a quarter turn about its own long axis.
+      //
+      // Measured over every armed frame, the roll needed to bring the grip
+      // down was 1.571 rad — exactly 90 degrees — at the median. That is not
+      // a coincidence: the arm poses hold the hand a quarter turn away from a
+      // real shooting grip, and the old weapon seating hid it by twisting the
+      // WEAPON instead, which is what put the grip out through the back of the
+      // hand. Pronating the hand at rest fixes the cause rather than the
+      // symptom: the poses keep working untouched, the grip runs through the
+      // fist as it should, and the per-frame roll correction drops to roughly
+      // zero, so the anatomical wrist limit never binds.
+      hand.group.rotation.y = side * Math.PI / 2;
+      hand.group.userData.rest = hand.group.quaternion.clone();
       fore.add(hand.group);
       return [arm, fore, hand];
     };
@@ -842,12 +954,10 @@ export class Character {
       // barrel along the hand's reach axis, magazine/grip toward the palm
       // (Euler XYZ: the z-roll is applied first, then the x-pitch) — B6
       const gunR = pistolMesh(m);
-      gunR.position.set(0, -0.08, -0.01);
-      gunR.rotation.set(-Math.PI / 2 + 0.12, 0, Math.PI);
+      seatWeapon(gunR, 1);
       handR.group.add(gunR);
       const gunL = pistolMesh(m);
-      gunL.position.set(0, -0.08, -0.01);
-      gunL.rotation.set(-Math.PI / 2 + 0.12, 0, Math.PI);
+      seatWeapon(gunL, -1);
       handL.group.add(gunL);
       gunL.visible = gunR.visible = false;
       gunL.userData.rest = gunL.quaternion.clone();
@@ -857,9 +967,7 @@ export class Character {
     }
     if (kind === 'soldier') {
       const gun = smgMesh(m);
-      gun.position.set(0, -0.09, -0.03);
-      // barrel forward along the aim, magazine raking down-forward (B6)
-      gun.rotation.set(-Math.PI / 2 + 0.1, 0, Math.PI);
+      seatWeapon(gun, 1);
       handR.group.add(gun);
       gun.userData.rest = gun.quaternion.clone();
       rig.gunR = gun;
@@ -905,10 +1013,14 @@ export class Character {
 
     if (r.gunL) r.gunL.visible = this.gunsVisible;
     if (r.gunR && this.kind !== 'soldier') r.gunR.visible = this.gunsVisible;
-    // the aim swivel is applied fresh each frame, never accumulated (B6)
+    // the aim swivel is applied fresh each frame, never accumulated (B6).
+    // B22: it now lands on the wrist, so the hands are what get reset; the
+    // weapons keep their rigid grip transform and are never rotated again.
     for (const g of [r.gunL, r.gunR]) {
       if (g && g.userData.rest) g.quaternion.copy(g.userData.rest);
     }
+    r.handL.group.quaternion.copy(r.handL.group.userData.rest);
+    r.handR.group.quaternion.copy(r.handR.group.userData.rest);
 
     // B6: for a moment after firing, the whole arm follows the round that
     // just left the barrel (soldiers shoot deliberately wide, so the target
@@ -993,6 +1105,12 @@ export class Character {
       case 'fall_slide':
         this.poseFallSlide(ease(p.phase));
         break;
+      case 'fall_knockback':
+        this.poseFallKnockback(p.phase);
+        break;
+      case 'fall_sprawl':
+        this.poseFallSprawl(ease(p.phase));
+        break;
       default:
         this.poseIdle(simT);
     }
@@ -1049,6 +1167,11 @@ export class Character {
         - (actor.vel[2] - actor.velLag[2]) * Math.sin(p.yaw);
       r.head.rotation.z += Math.max(-0.12, Math.min(0.12, -dv * 0.045));
     }
+
+    // B29: last, once every joint for this frame is final — a body has to be
+    // seated on the floor against the pose it actually ends up in, not the one
+    // it started the frame with.
+    this.seatOnFloor(p.action, p.phase);
   }
 
   /** Accumulated world rotation of `obj` (root -> obj), without a full
@@ -1064,6 +1187,63 @@ export class Character {
   }
 
   /**
+   * B29: seat a fallen body ON the floor rather than through it.
+   *
+   * Every fall pose rotates the whole body about `tilt`, whose origin is the
+   * rig root — and the root sits on the floor, because that is where a
+   * STANDING figure's feet are. Rotating a standing figure flat about that
+   * point therefore leaves roughly half its thickness below the plane, which
+   * is exactly what was happening: measured at rest, every settled body was
+   * between 0.14 m and 0.54 m under the marble, the prone sprawl worst of all.
+   *
+   * The fix has to be a measurement, not a per-pose constant. The offset a
+   * pose needs depends on the pose, on how far through it the body is, and on
+   * the limb angles at that instant — a hand-tuned number per pose would be
+   * wrong for every frame except the one it was tuned on, and would have to be
+   * redone whenever a pose changed. So the rig's actual underside is measured
+   * and the root lifted by exactly that much: it cannot sink, and because the
+   * lift is exact rather than a clamped minimum, it cannot hover either.
+   *
+   * Cost is kept off the hot path: only bodies actually in a fall are measured,
+   * and once one has settled its lift is cached until it moves again.
+   */
+  /** True for anything hanging off a hand rather than part of the body. */
+  private isHeldGear(o: THREE.Object3D): boolean {
+    for (let p: THREE.Object3D | null = o; p; p = p.parent) {
+      if (p === this.rig.gunL || p === this.rig.gunR) return true;
+      if (p === this.rig.root) return false;
+    }
+    return false;
+  }
+
+  private seatOnFloor(action: string, phase: number) {
+    if (!action.startsWith('fall_')) {
+      this.floorLift = null;
+      return;
+    }
+    if (this.floorLift !== null && phase >= 1) {
+      this.rig.root.position.y += this.floorLift;
+      return;
+    }
+    this.rig.root.updateMatrixWorld(true);
+    // The BODY's lowest point, not the weapon's. A rifle is rigidly seated in
+    // the fist, so a man who falls onto his own gun has its barrel or magazine
+    // as the lowest thing in his bounding box; levelling on that floated every
+    // crumpled body 0.23 m off the marble, which at floor level reads worse
+    // than a barrel dipping a couple of centimetres into it.
+    _box.makeEmpty();
+    this.rig.root.traverse((o) => {
+      if (!(o as THREE.Mesh).isMesh) return;
+      if (this.isHeldGear(o)) return;
+      _boxTmp.setFromObject(o);
+      _box.union(_boxTmp);
+    });
+    const lift = Math.max(0, -_box.min.y);
+    this.rig.root.position.y += lift;
+    if (phase >= 1) this.floorLift = lift;
+  }
+
+  /**
    * B6: swivel the held weapons at the wrist so the barrel points along the
    * character's aim direction, whatever the body staging is doing. The
    * cartwheel and the wall run rotate the whole body, so without this the
@@ -1071,6 +1251,16 @@ export class Character {
    * the grip) and is clamped to a plausible wrist range.
    */
   private pointGunsAt(actor: ActorSim, aim: V3 | null, maxRad: number, simT: number, strength = 1) {
+    // B22: the swivel is applied to the WRIST, not to the weapon.
+    //
+    // It used to premultiply the aim delta onto the gun's own quaternion while
+    // the gun was a child of the hand, so the weapon turned freely inside a
+    // hand that never moved. The grip/palm relationship was therefore
+    // unconstrained: from some aim directions the grip ended up on the
+    // back-of-hand side, which is what reads as a hand attached upside down.
+    // Rotating the hand instead keeps the weapon rigidly gripped, so the palm
+    // is against the grip by construction and cannot drift at any aim.
+
     if (strength <= 0) return;
     const r = this.rig;
     const p = actor.pose;
@@ -1086,14 +1276,61 @@ export class Character {
     _vWant.normalize();
     for (const g of [r.gunR, r.gunL]) {
       if (!g || !g.visible || !g.parent) continue;
-      this.chainQuat(g.parent, _qChain);
-      _vLocal.copy(_vWant).applyQuaternion(_qChain.invert()).normalize();
-      _vCur.set(0, 0, -1).applyQuaternion(g.quaternion).normalize();
+      const hand = g.parent;
+      // aim expressed in the hand's PARENT (forearm) frame
+      this.chainQuat(hand.parent!, _qChain);
+      _qChainInv.copy(_qChain).invert();
+      _vLocal.copy(_vWant).applyQuaternion(_qChainInv).normalize();
+      // where the barrel currently points, in that same frame
+      _vCur.set(0, 0, -1)
+        .applyQuaternion(g.quaternion)
+        .applyQuaternion(hand.quaternion)
+        .normalize();
       _qDelta.setFromUnitVectors(_vCur, _vLocal);
       const ang = 2 * Math.acos(Math.min(1, Math.abs(_qDelta.w)));
       const k = strength * (ang > maxRad ? maxRad / ang : 1);
       if (k < 1) _qDelta.slerpQuaternions(_qIdent, _qDelta, k);
-      g.quaternion.premultiply(_qDelta);
+      hand.quaternion.premultiply(_qDelta);
+
+      // B22: aligning the barrel says nothing about the ROLL around it, and
+      // with the grip now running through the fist (anatomically, across the
+      // palm) an uncontrolled roll leaves the weapon held sideways. So after
+      // the barrel is pointed, the hand is rolled about the barrel until the
+      // grip hangs as close to straight down as the pose allows. This is the
+      // invariant B6 already measures — grip below barrel while upright — and
+      // it is what a shooter's wrist actually does.
+      _vBarrel.set(0, 0, -1)
+        .applyQuaternion(g.quaternion).applyQuaternion(hand.quaternion).normalize();
+      _vGrip.set(0, -1, 0)
+        .applyQuaternion(g.quaternion).applyQuaternion(hand.quaternion).normalize();
+      _vDown.set(0, -1, 0).applyQuaternion(_qChainInv).normalize();
+      // components perpendicular to the barrel: the roll cannot change the
+      // barrel direction, only where "down the grip" sits around it
+      _vA.copy(_vGrip).addScaledVector(_vBarrel, -_vGrip.dot(_vBarrel));
+      _vB.copy(_vDown).addScaledVector(_vBarrel, -_vDown.dot(_vBarrel));
+      if (_vA.lengthSq() > 1e-6 && _vB.lengthSq() > 1e-6) {
+        _vA.normalize();
+        _vB.normalize();
+        const roll = Math.atan2(
+          _vX.crossVectors(_vA, _vB).dot(_vBarrel),
+          _vA.dot(_vB),
+        );
+        _qRoll.setFromAxisAngle(_vBarrel, roll * strength);
+        hand.quaternion.premultiply(_qRoll);
+      }
+      // The anatomical limit is measured from the hand's REST orientation,
+      // not from identity. The rest is itself a quarter-turn pronation, so
+      // clamping the absolute twist clamped the rest away and pinned both
+      // hands to the same boundary whatever the pose asked for.
+      const rest = hand.userData.rest as THREE.Quaternion | undefined;
+      if (rest) {
+        _qRestInv.copy(rest).invert();
+        _qRel.copy(_qRestInv).multiply(hand.quaternion);
+        clampTwist(_qRel, WRIST_AXIS, WRIST_ROLL_MAX);
+        hand.quaternion.copy(rest).multiply(_qRel);
+      } else {
+        clampTwist(hand.quaternion, WRIST_AXIS, WRIST_ROLL_MAX);
+      }
     }
   }
 
@@ -1375,17 +1612,113 @@ export class Character {
 
   private poseFallSlide(k: number) {
     const r = this.rig;
-    // back against the column, sliding down to a seated slump
-    r.hips.position.y = HIP_Y - 0.62 * k;
-    r.torso.rotation.x = -0.12 * k;
-    r.legL.rotation.x = -1.35 * k;
-    r.legR.rotation.x = -1.15 * k;
-    r.shinL.rotation.x = 0.4 * k;
-    r.shinR.rotation.x = 0.6 * k;
-    r.head.rotation.x = 0.55 * k;
-    r.armL.rotation.z = 0.3 * k;
-    r.armR.rotation.z = -0.35 * k;
+    // Back against the column, sliding down into a COLLAPSED slump.
+    //
+    // B29: the old end state left the torso at -0.12 rad, essentially
+    // vertical, so even a body correctly against a column read as a man
+    // sitting to attention rather than one who has stopped. The spine folds
+    // now, the head goes right down and the whole body leans off its axis.
+    r.hips.position.y = HIP_Y - 0.66 * k;
+    r.torso.rotation.x = 0.42 * k;
+    r.torso.rotation.z = 0.26 * k;
+    r.legL.rotation.x = -1.4 * k;
+    r.legR.rotation.x = -1.05 * k;
+    r.legL.rotation.z = 0.22 * k;
+    r.legR.rotation.z = -0.3 * k;
+    r.shinL.rotation.x = 0.55 * k;
+    r.shinR.rotation.x = 0.85 * k;
+    r.head.rotation.x = 0.95 * k;
+    r.head.rotation.z = 0.3 * k;
+    r.armL.rotation.z = 0.55 * k;
+    r.armR.rotation.z = -0.7 * k;
+    r.armL.rotation.x = 0.35 * k;
+    r.armR.rotation.x = 0.5 * k;
+    r.tilt.rotation.z = 0.16 * k;
     r.torso.position.z = -0.06 * k;
+  }
+
+  /**
+   * B29: face-down in the open, arms out, one knee drawn up.
+   *
+   * The existing three do not cover a body that falls forward with nothing
+   * behind it: crumple rolls onto its side, drop goes flat on its back, and
+   * slide only makes sense against a vertical surface. Five defenders were
+   * using slide with nothing behind them and reading as men sitting upright on
+   * the floor. This gives the substitution somewhere to go that is not just
+   * more of the other two, so a hall full of casualties does not read as two
+   * repeated poses.
+   */
+  private poseFallSprawl(k: number) {
+    const r = this.rig;
+    // pitched forward onto the face, hips down, weight on the chest
+    r.tilt.rotation.x = 1.46 * k;
+    r.tilt.rotation.z = 0.22 * k;
+    r.tilt.position.y = -0.05 * k;
+    // arms thrown out ahead and to the sides
+    r.armL.rotation.x = -1.35 * k;
+    r.armR.rotation.x = -0.95 * k;
+    r.armL.rotation.z = 0.85 * k;
+    r.armR.rotation.z = -1.15 * k;
+    r.foreL.rotation.x = -0.45 * k;
+    r.foreR.rotation.x = -0.25 * k;
+    // one knee drawn up under him, the other leg trailing
+    r.legL.rotation.x = -0.55 * k;
+    r.legR.rotation.x = -0.12 * k;
+    r.shinL.rotation.x = 1.25 * k;
+    r.shinR.rotation.x = 0.35 * k;
+    r.head.rotation.x = -0.3 * k;
+  }
+
+  /**
+   * B21: thrown backward off his feet, slammed into the stone behind him, then
+   * down the face of it to the floor.
+   *
+   * Distinct from the other three by construction: crumple folds in place,
+   * drop goes straight down, slide starts already against the column. This one
+   * has an airborne phase — the figure is lifted and carried back before it
+   * hits anything — which is what makes it read as being HIT rather than as
+   * giving way. It is over quickly and the camera leaves as it ends; the
+   * violence limits hold, there is no gore, and nothing dwells on him.
+   */
+  private poseFallKnockback(kRaw: number) {
+    const r = this.rig;
+    const k = clamp01(kRaw);
+    // 0.00-0.34  lifted and carried backward, arms flung up
+    // 0.34-0.52  the slam: stopped hard by the stone
+    // 0.52-1.00  sliding down the face of it into a slump
+    const air = clamp01(k / 0.34);
+    const slam = clamp01((k - 0.34) / 0.18);
+    const down = clamp01((k - 0.52) / 0.48);
+
+    // carried back and slightly up, then held against the stone
+    r.hips.position.y = HIP_Y + 0.16 * air * (1 - slam * 0.35) - 0.66 * down;
+    r.torso.position.z = -0.34 * air + 0.05 * slam;
+    // whipped back at the waist, then jolted forward on the impact
+    r.torso.rotation.x = -0.62 * air + 0.5 * slam - 0.1 * down;
+    r.head.rotation.x = -0.55 * air + 0.85 * slam + 0.1 * down;
+    // arms flung up and out by the hit
+    r.armL.rotation.x = -1.5 * air + 0.9 * down;
+    r.armR.rotation.x = -1.65 * air + 1.0 * down;
+    r.armL.rotation.z = 0.75 * air - 0.35 * down;
+    r.armR.rotation.z = -0.8 * air + 0.4 * down;
+    r.foreL.rotation.x = -0.5 * air;
+    r.foreR.rotation.x = -0.55 * air;
+    // legs swing out from under him, then fold as he comes down the wall
+    r.legL.rotation.x = 0.7 * air - 2.0 * down;
+    r.legR.rotation.x = 0.55 * air - 1.8 * down;
+    r.shinL.rotation.x = 0.3 * air + 0.75 * down;
+    r.shinR.rotation.x = 0.35 * air + 0.6 * down;
+    // B29: and he keeps going once he is down. The old end state settled at
+    // roughly -13 degrees of torso pitch, which is upright, so the one body in
+    // the wreckage that had genuinely been slammed into stone read as sitting
+    // to attention against it. The spine folds and the head drops.
+    r.torso.rotation.x += 0.62 * down;
+    r.torso.rotation.z = 0.3 * down;
+    r.head.rotation.x += 0.5 * down;
+    r.head.rotation.z = -0.26 * down;
+    r.legL.rotation.z = 0.26 * down;
+    r.legR.rotation.z = -0.22 * down;
+    r.tilt.rotation.z = -0.2 * down;
   }
 
   /**

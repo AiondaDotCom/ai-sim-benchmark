@@ -23,30 +23,16 @@ export interface Mats {
   skinW: THREE.MeshStandardMaterial;
   black: THREE.MeshStandardMaterial;
   trouser: THREE.MeshStandardMaterial;
+  fatigue: THREE.MeshStandardMaterial;
+  webbing: THREE.MeshStandardMaterial;
+  helmetGreen: THREE.MeshStandardMaterial;
   gunmetal: THREE.MeshStandardMaterial;
   glass: THREE.MeshStandardMaterial;
   wood: THREE.MeshStandardMaterial;
   textures: {
-    bulletHole: THREE.Texture;
-    crack: THREE.Texture;
     substrate: THREE.Texture;
-    radialAlpha: THREE.Texture;
     dust: THREE.Texture;
   };
-}
-
-function radialAlphaTexture(): THREE.Texture {
-  const c = document.createElement('canvas');
-  c.width = c.height = 128;
-  const g = c.getContext('2d')!;
-  const grad = g.createRadialGradient(64, 64, 8, 64, 64, 62);
-  grad.addColorStop(0, 'rgba(255,255,255,1)');
-  grad.addColorStop(0.6, 'rgba(255,255,255,0.85)');
-  grad.addColorStop(1, 'rgba(255,255,255,0)');
-  g.fillStyle = grad;
-  g.fillRect(0, 0, 128, 128);
-  const t = new THREE.CanvasTexture(c);
-  return t;
 }
 
 function dustSprite(): THREE.Texture {
@@ -106,7 +92,7 @@ export async function loadMats(): Promise<Mats> {
     });
 
   const [
-    graniteT, floorT, ceilT, metalT, brassT, subT, coatT, latexT, shirtT, holeT, crackT,
+    graniteT, floorT, ceilT, metalT, brassT, subT, coatT, latexT, shirtT,
   ] = await Promise.all([
     tex('granite_tile', [1, 5.4]),
     tex('floor_green', [8, 19]),
@@ -117,8 +103,6 @@ export async function loadMats(): Promise<Mats> {
     tex('a11_coat_twill', [2.6, 2.6]),
     tex('a11_latex_sheen', [2, 2]),
     tex('a11_shirt_weave', [3, 3]),
-    tex('bullet_hole'),
-    tex('crack_decal'),
   ]);
   // A11: the soldiers get their own tactical weave rather than a re-tiled
   // coat twill
@@ -139,6 +123,10 @@ export async function loadMats(): Promise<Mats> {
   // --- derived relief -----------------------------------------------------
   // normalScale per material: granite coarse and speckled, fabric woven,
   // polished stone with relief only in the veining.
+  // A14: the reinforcements are MILITARY, in field green — not black-clad.
+  const fatigueT = await tex('a14_field_green', [2.2, 2.2]).catch(() => null);
+  const webbingT = await tex('a14_webbing_green', [2.6, 2.6]).catch(() => null);
+
   const REL: Record<string, [THREE.Texture, number]> = {
     granite: [graniteT, 0.85], floor: [floorT, 0.28], metal: [metalT, 0.35],
     brass: [brassT, 0.3], coat: [coatT, 0.7], latex: [latexT, 0.35],
@@ -146,11 +134,14 @@ export async function loadMats(): Promise<Mats> {
     skin: [skinT ?? graniteT, 0.22],
     substrate: [subT, 1.15],
     black: [bootT ?? graniteT, 0.6],
+    fatigue: [fatigueT ?? graniteT, 0.75],
+    webbing: [webbingT ?? graniteT, 0.85],
   };
   const NAME: Record<string, string> = {
     granite: 'granite_tile', floor: 'floor_green', metal: 'brushed_metal',
     brass: 'brass', coat: 'coat_fabric', latex: 'latex_black',
     shirt: 'shirt_white', darkCloth: 'coat_fabric', wall: 'granite_tile',
+    fatigue: 'a14_field_green', webbing: 'a14_webbing_green',
   };
   const rel: Record<string, { n: THREE.Texture | null; r: THREE.Texture | null; s: number }> = {};
   await Promise.all(Object.keys(REL).map(async (k) => {
@@ -210,6 +201,26 @@ export async function loadMats(): Promise<Mats> {
     skinW: withRelief(new M({ color: 0xd9b096, roughness: 0.55 }), 'skin'),
     black: withRelief(new M({ color: 0x191a1c, roughness: 0.45, map: bootT ?? undefined }), 'black'),
     trouser: new M({ color: 0x26282c, roughness: 0.78 }),
+    /**
+     * A14. The set is dark teal-green granite under a green grade, so an olive
+     * uniform risks disappearing into it. Two rules keep the squad readable:
+     * the fatigues sit clearly LIGHTER in value than the granite, and the
+     * webbing, vest and helmet sit clearly darker than the fatigues, so the
+     * figures separate from the wall by brightness even where the hue agrees
+     * and the gear reads as gear rather than as more uniform.
+     */
+    fatigue: withRelief(new M({
+      color: 0xffffff, roughness: 0.88, metalness: 0,
+      ...(fatigueT ? { map: fatigueT } : {}),
+    }), 'fatigue'),
+    webbing: withRelief(new M({
+      color: 0xa8b096, roughness: 0.94, metalness: 0,
+      ...(webbingT ? { map: webbingT } : {}),
+    }), 'webbing'),
+    helmetGreen: new M({
+      color: 0x8f9a7c, roughness: 0.7, metalness: 0.05,
+      ...(webbingT ? { map: webbingT } : {}),
+    }),
     gunmetal: new M({ color: 0x2a2d31, roughness: 0.35, metalness: 0.8 }),
     glass: new M({
       color: 0x8fa79c, roughness: 0.05, metalness: 0.3,
@@ -217,10 +228,7 @@ export async function loadMats(): Promise<Mats> {
     }),
     wood: new M({ color: 0x241d16, roughness: 0.55 }),
     textures: {
-      bulletHole: holeT,
-      crack: crackT,
       substrate: subT,
-      radialAlpha: radialAlphaTexture(),
       dust: dustSprite(),
     },
   };

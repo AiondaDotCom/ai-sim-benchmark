@@ -4,7 +4,7 @@
  */
 import * as THREE from 'three';
 import { Reflector } from 'three/examples/jsm/objects/Reflector.js';
-import { HALL, COLUMN, COLUMNS, CHECKPOINT, ELEVATOR } from '../sim/layout';
+import { HALL, COLUMN, COLUMNS, CHECKPOINT, ELEVATOR, BENCH } from '../sim/layout';
 import { CLAD_DEPTH } from './cladding';
 import { elevatorDoorAt, entranceDoorAt, detectorLampAt } from '../sim/timeline';
 import type { Mats } from './materials';
@@ -103,13 +103,30 @@ export class Lobby {
     this.entrDoorL = mkDoor(-1);
     this.entrDoorR = mkDoor(1);
 
-    // back (elevator) wall
-    // B8: the elevator wall is two-layered by render/cladding.ts as well; this
-    // plane stays only as an opaque backing behind it.
-    const back = new THREE.Mesh(new THREE.PlaneGeometry(W * 2, wallH), mats.substrate);
-    back.position.set(0, wallH / 2, -L);
-    back.rotation.y = 0;
-    g.add(back);
+    // back (elevator) wall.
+    // B8 made this the opaque backing behind the two-layer cladding; B12 gives
+    // it REAL openings. It used to be one 16 x 7 plane straight across the
+    // bank, which meant the three portals had no hole in them at all — the lit
+    // cabs and anyone standing in them were behind a solid wall. The wall is
+    // now built as the panel above the portals plus the piers between them.
+    {
+      const ph = ELEVATOR.doorH;
+      const hw = ELEVATOR.doorW / 2;
+      const above = new THREE.Mesh(new THREE.PlaneGeometry(W * 2, wallH - ph), mats.substrate);
+      above.position.set(0, ph + (wallH - ph) / 2, -L);
+      g.add(above);
+      // solid spans between and outside the three openings, up to lintel height
+      const edges = [-W];
+      for (const dx of ELEVATOR.doors) edges.push(dx - hw, dx + hw);
+      edges.push(W);
+      for (let i = 0; i < edges.length; i += 2) {
+        const w = edges[i + 1] - edges[i];
+        if (w <= 0.001) continue;
+        const pier = new THREE.Mesh(new THREE.PlaneGeometry(w, ph), mats.substrate);
+        pier.position.set(edges[i] + w / 2, ph / 2, -L);
+        g.add(pier);
+      }
+    }
 
     // elevator bank (B2 + supplement): tall portals in the granite wall,
     // thin dark architraves, dark brushed-metal center-split leaves that
@@ -295,9 +312,13 @@ export class Lobby {
     box(0.5, 0.6, 0.7, mats.black, d.x + 1.0, 1.1, d.z + 1.05);
 
     // --- benches along walls (set dressing) -------------------------------
+    // dimensions from layout.ts, so the clearance the sim reserves and the
+    // mesh built here cannot drift apart (they had: the sim did not know the
+    // benches were there at all)
     for (const side of [-1, 1]) {
-      for (const bz of [5, -7]) {
-        box(0.6, 0.45, 2.6, mats.wood, side * (W - 0.75), 0.22, bz);
+      for (const bz of BENCH.rows) {
+        box(BENCH.w, BENCH.h, BENCH.d, mats.wood,
+          side * (W - BENCH.inset), BENCH.h / 2, bz);
       }
     }
   }

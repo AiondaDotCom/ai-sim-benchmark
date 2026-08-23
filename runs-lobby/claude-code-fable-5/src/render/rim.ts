@@ -73,6 +73,9 @@ export function applyCharacterRim(mats: Record<string, unknown>) {
   const table: [string, RimOptions][] = [
     ['coat', cloth], ['latex', shiny], ['shirt', { strength: 0.3, power: 3.2 }],
     ['darkCloth', cloth], ['trouser', cloth], ['guardTrouser', cloth],
+    // A14: the green squad needs the rim doing part of the separation work
+    // against a green hall, same as every other character material
+    ['fatigue', cloth], ['webbing', cloth], ['helmetGreen', shiny],
     ['black', cloth], ['skin', flesh], ['skinW', flesh],
   ];
   for (const [key, opt] of table) {

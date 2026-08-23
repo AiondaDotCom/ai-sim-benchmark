@@ -6,6 +6,7 @@
  */
 import * as THREE from 'three';
 import type { World } from '../sim/world';
+import type { SimEvent } from '../sim/events';
 
 interface ShotCtx {
   world: World;
@@ -53,7 +54,47 @@ export class CameraDirector {
   /** Dev-only fixed camera, for verification framings the cut list lacks. */
   overrideCam: number[] | null = null;
 
-  update(world: World, realDt: number) {
+  /**
+   * B24: camera shake is punctuation, not a background state.
+   *
+   * It used to be `battle * shakeScale` — a continuous handheld wobble for the
+   * entire firefight, which reads as restless rather than energetic and was
+   * actively hurting the shots that depend on stillness. Now each impulse is
+   * a discrete kick that decays within a fraction of a second, its magnitude
+   * falling off with distance from the lens, and between events the camera is
+   * still.
+   *
+   * Two things keep it honest. The oscillation phase is driven by SIM time,
+   * not the wall clock, so a replay reproduces it exactly and freeze mode is
+   * pinned. And the whole response is multiplied by the choreographed time
+   * scale, so in the slow-motion windows it essentially vanishes — a locked,
+   * gliding camera is what makes bullet-time read.
+   */
+  private kicks: { t: number; mag: number }[] = [];
+  /** current shake displacement in metres (dev verification) */
+  shakeAmp = 0;
+
+  /**
+   * Beats that must be perfectly still. Gunfire does not occur in most of
+   * these anyway, but the closing beats can carry impacts (a slab coming down)
+   * and the point of them is silence.
+   */
+  private static readonly CALM: [number, number][] = [
+    [0, 14],      // entrance walk and the checkpoint
+    [17.6, 19.0], // A15: the held standoff — stillness is the whole point
+    [46.6, 90],   // wind-down, the exit to the elevator, and the closing hold
+  ];
+
+  private addKick(simT: number, pos: number[], strength: number, eye: THREE.Vector3) {
+    const dx = pos[0] - eye.x, dy = pos[1] - eye.y, dz = pos[2] - eye.z;
+    const d2 = dx * dx + dy * dy + dz * dz;
+    const mag = strength / (1 + d2 / 7);
+    if (mag < 0.01) return;
+    this.kicks.push({ t: simT, mag });
+    if (this.kicks.length > 48) this.kicks.shift();
+  }
+
+  update(world: World, realDt: number, events: SimEvent[] = [], timeScale = 1) {
     this.realClock += realDt;
     const t = world.t;
     let idx = 0;
@@ -81,21 +122,43 @@ export class CameraDirector {
       this.tmpEye.set(c[0], c[1], c[2]);
       this.tmpLook.set(c[3], c[4], c[5]);
     }
-    // subtle handheld shake during the battle
-    if (ctx.shake > 0) {
-      const s = 0.025 * ctx.shake;
-      // pinned under ?freeze so the frame is reproducible
-      const c = this.freezeRealT ?? this.realClock;
-      this.tmpEye.x += Math.sin(c * 13.7) * s;
-      this.tmpEye.y += Math.sin(c * 17.3 + 1.7) * s;
-      this.tmpLook.x += Math.sin(c * 11.1 + 0.5) * s * 1.4;
+
+    // B24: turn this frame's events into impulses, measured from where the
+    // lens actually ended up
+    const calm = CameraDirector.CALM.some(([a, b]) => t >= a && t < b);
+    if (!calm) {
+      for (const e of events) {
+        if (e.type === 'SHOT') this.addKick(t, e.pos, 0.22, this.tmpEye);
+        else if (e.type === 'IMPACT_MARBLE') this.addKick(t, e.pos, 0.8, this.tmpEye);
+        // a slab coming down is the heaviest impulse in the scene
+        else if (e.type === 'SLAB_LAND') this.addKick(t, e.pos, 2.6, this.tmpEye);
+      }
+    }
+    // sum the live impulses; each decays within a fraction of a second
+    let amp = 0;
+    for (const k of this.kicks) {
+      const age = t - k.t;
+      if (age < 0 || age > 0.35) continue;
+      amp += k.mag * Math.exp(-age / 0.055);
+    }
+    // ...scaled by the choreographed time scale, so slow motion is locked
+    const s = 0.009 * Math.min(amp, 2.2) * this.shakeScale * timeScale;
+    // headless-verification aid (no UI): the live shake amplitude, so
+    // "still during the calm beats" is a measurement rather than an opinion
+    this.shakeAmp = s;
+    if (s > 1e-5 && !calm) {
+      // phase from SIM time: reproducible on replay, pinned under ?freeze
+      this.tmpEye.x += Math.sin(t * 121.0) * s;
+      this.tmpEye.y += Math.sin(t * 157.0 + 1.7) * s * 0.8;
+      this.tmpLook.x += Math.sin(t * 97.0 + 0.5) * s * 1.3;
+      this.tmpLook.y += Math.sin(t * 113.0 + 2.3) * s * 0.9;
     }
     this.camera.position.copy(this.tmpEye);
     this.camera.lookAt(this.tmpLook);
   }
 }
 
-function buildShots(): Shot[] {
+export function buildShots(): Shot[] {
   return [
     // 1 — establishing wide from the elevator end: the man pushes in.
     {
@@ -141,11 +204,61 @@ function buildShots(): Shot[] {
         look.set(-0.1, 1.3, 9.65);
       },
     },
-    // 5 — eruption: strikes + flying kick, wide from the right.
+    // 5 — A16: the man's strike, close and from behind him.
+    //
+    // The eruption used to play in one static wide from the right, which reads
+    // as two figures at a distance. These sit behind the striking figure with
+    // the guard's light uniform filling the opposite side of frame, so the
+    // blow lands in the foreground instead of across the room. Each holds
+    // through the contact and cuts out; the beat times are untouched.
     {
       id: '5',
-      subject: 'eruption',
+      subject: 'a16 strike close (man)',
       t0: 12.2,
+      update(ctx, eye, look) {
+        const g = ctx.world.actors.get('g0');
+        const tgt = g ? v(g.pose.pos[0], 1.18, g.pose.pos[2]) : v(1.4, 1.18, 10.1);
+        // behind his shoulder, offset to his left so the strike crosses frame
+        const dx = tgt.x - ctx.neo.x, dz = tgt.z - ctx.neo.z;
+        const L = Math.hypot(dx, dz) || 1;
+        const ux = dx / L, uz = dz / L;
+        eye.set(
+          ctx.neo.x - ux * 1.02 - uz * 0.52,
+          1.62,
+          ctx.neo.z - uz * 1.02 + ux * 0.52,
+        );
+        look.set(tgt.x * 0.72 + ctx.neo.x * 0.28, 1.24, tgt.z * 0.72 + ctx.neo.z * 0.28);
+      },
+    },
+    // 5b — A16: the woman's kick, close and from behind her. This is the one
+    // the beat is built around.
+    {
+      id: '5b',
+      subject: 'a16 strike close (woman)',
+      t0: 12.92,
+      update(ctx, eye, look) {
+        const g = ctx.world.actors.get('g1');
+        const tgt = g ? v(g.pose.pos[0], 1.16, g.pose.pos[2]) : v(-1.95, 1.16, 8.2);
+        const dx = tgt.x - ctx.trin.x, dz = tgt.z - ctx.trin.z;
+        const L = Math.hypot(dx, dz) || 1;
+        const ux = dx / L, uz = dz / L;
+        // Framed for the CONTACT frame, not the cue. The kick launches at
+        // 13.15 with 1.9 m still between them and connects at 13.30 with 1.0 m
+        // — a two-shot built on the cue time shows a strike landing on nobody.
+        eye.set(
+          ctx.trin.x - ux * 0.86 + uz * 0.42,
+          1.60,
+          ctx.trin.z - uz * 0.86 - ux * 0.42,
+        );
+        look.set(tgt.x * 0.66 + ctx.trin.x * 0.34, 1.22, tgt.z * 0.66 + ctx.trin.z * 0.34);
+      },
+    },
+    // 5c — back out to the wide as the last two strikes land, which also
+    // carries the beat into the storm-in without stretching it.
+    {
+      id: '5c',
+      subject: 'eruption wide',
+      t0: 13.52,
       update(ctx, eye, look) {
         eye.set(5.2, 2.0, 9.0);
         look.set(-0.3, 1.2, 9.3);
@@ -162,33 +275,49 @@ function buildShots(): Shot[] {
         look.set(0, 0.7, -7);
       },
     },
-    // 6b — A5 INSERT: the bullet leaves the muzzle — flash, smoke, casing.
+    // 6b — A15 DEPLOYMENT: a low wide down the hall, held, so the whole squad
+    // is read as one body fanning out into cover rather than as individuals.
+    // The lens drifts back as the line forms, which lets the frame fill.
     {
       id: '6b',
-      subject: 'a5 insert',
-      t0: 14.95,
+      subject: 'a15 deployment',
+      t0: 15.0,
       update(ctx, eye, look) {
-        const k = clamp01(ctx.realT / 4);
-        eye.set(1.55 - k * 0.15, 1.42, 7.95 + k * 0.1);
-        look.set(0.02, 1.36, 8.4);
+        const k = clamp01(ctx.realT / 2.6);
+        eye.set(0.6, 1.02 + k * 0.18, -1.2 + k * 2.9);
+        look.set(0, 1.15, -9.5);
       },
     },
-    // 6c — resume the storm-in coverage.
+    // 6c — A15 STANDOFF: lateral track across the formed line, weapons
+    // trained, nobody firing. Slow and level — the stillness is the point, and
+    // B24's shake is gated to zero through here.
     {
       id: '6c',
-      subject: 'resume the storm-in coverage',
-      t0: 15.5,
+      subject: 'a15 standoff',
+      t0: 17.62,
       update(ctx, eye, look) {
-        const mid = lerpV(ctx.neo, ctx.trin, 0.5);
-        eye.set(2.4, 3.15, mid.z + 5.5);
-        look.set(0, 0.7, -7);
+        const k = clamp01(ctx.realT / 1.4);
+        eye.set(-2.5 + k * 1.9, 1.55, 0.4);
+        look.set(-0.4 + k * 0.9, 1.25, -7.5);
+      },
+    },
+    // 6d — A15 BREAK: cut to the man as he fires and moves in one motion.
+    // This is where the A5 muzzle-exit insert now lands.
+    {
+      id: '6d',
+      subject: 'a15 break / a5 insert',
+      t0: 18.9,
+      update(ctx, eye, look) {
+        const k = clamp01(ctx.realT / 4);
+        eye.set(ctx.neo.x + 1.15 - k * 0.2, 1.42, ctx.neo.z + 1.35 + k * 0.1);
+        look.copy(ctx.neo).add(v(0, 1.3, 0));
       },
     },
     // 7 — SET PIECE 1: orbit the cartwheel (slow-mo inside).
     {
       id: '7',
       subject: 'set piece 1',
-      t0: 18.5,
+      t0: 19.2,
       update(ctx, eye, look) {
         const a = 2.6 + ctx.realT * 0.5;
         const r = 2.6;
@@ -330,41 +459,78 @@ function buildShots(): Shot[] {
         look.copy(mid).add(v(0, 1.05, 0));
       },
     },
-    // 14b — A7 BULLET-CAM: ride the last kill shot across the hall in
-    // extreme slow motion; cut wide the moment it connects.
+    // 14b — A7/B21 BULLET-CAM: leave the muzzle with the round, ride it
+    // across the hall close enough to read it, and SEE it connect.
+    //
+    // The rebuild was driven by measuring the old one rather than by re-staging
+    // it. The round lives from t=39.700 to 39.750 and the old ride handed over
+    // at flight > hitDist - 0.75, so it lasted 38 ms of sim; a frame at 39.74
+    // was already past it and on the impact wide, which is the wide, distant
+    // view the report described. And the lens rode 0.40 m abeam a 4.6 cm
+    // round, which is a few pixels — a shot that cannot show its subject has
+    // failed however correct the path code is.
     {
       id: '14b',
       subject: 'a7 bullet-cam',
-      t0: 39.64,
+      t0: 39.62,
       update(ctx, eye, look) {
         const p = ctx.world.projectiles.find((q) => q.cam);
-        const flight = p ? (ctx.world.t - p.born) * p.speed : 0;
-        // hand over to the wide cut before the lens reaches the figure
-        if (p && !p.done && flight < p.hitDist - 0.75) {
-          const h = Math.max(0.25, flight);
-          const hx = p.from[0] + p.dir[0] * h;
-          const hy = p.from[1] + p.dir[1] * h;
-          const hz = p.from[2] + p.dir[2] * h;
-          // abeam the round, riding along with it: the projectile is held in
-          // profile in the foreground while the hall streaks past behind it.
+        // 1 — before the round exists: abeam the muzzle it is about to leave,
+        //     so the flash and smoke at exit are the first thing seen. The
+        //     framing is derived from her actual aim rather than from fixed
+        //     offsets — offsets guessed against her facing put her behind the
+        //     lens entirely — and it matches the ride geometry below, so the
+        //     hand-over is continuous rather than a cut.
+        if (!p) {
+          const sh = ctx.trin;
+          const a = ctx.world.actors.get('trin')?.aim;
+          let dx = 0, dz = -1;
+          if (a) {
+            dx = a[0] - sh.x;
+            dz = a[2] - sh.z;
+            const L = Math.hypot(dx, dz) || 1;
+            dx /= L; dz /= L;
+          }
+          const mx = sh.x + dx * 0.42;
+          const mz = sh.z + dz * 0.42;
+          const px = -dz, pz = dx;
+          eye.set(mx + px * 0.78 - dx * 0.22, 1.26, mz + pz * 0.78 - dz * 0.22);
+          look.set(mx + dx * 0.3, 1.32, mz + dz * 0.3);
+          return;
+        }
+        const flight = (ctx.world.t - p.born) * p.speed;
+        const hx = p.from[0] + p.dir[0] * flight;
+        const hy = p.from[1] + p.dir[1] * flight;
+        const hz = p.from[2] + p.dir[2] * flight;
+        // 2 — the ride, right up to the moment it lands. 0.13 m abeam and a
+        //     touch behind, so the round is large in frame, held in profile,
+        //     with the hall streaking past behind it.
+        if (!p.done && flight < p.hitDist - 0.06) {
           const px = -p.dir[2], pz = p.dir[0]; // horizontal perpendicular
           eye.set(
-            hx + px * 0.4 - p.dir[0] * 0.1,
-            hy + 0.055,
-            hz + pz * 0.4 - p.dir[2] * 0.1,
+            hx + px * 0.13 - p.dir[0] * 0.055,
+            hy + 0.022,
+            hz + pz * 0.13 - p.dir[2] * 0.055,
           );
-          look.set(hx + p.dir[0] * 0.12, hy, hz + p.dir[2] * 0.12);
+          look.set(hx + p.dir[0] * 0.05, hy, hz + p.dir[2] * 0.05);
           return;
         }
-        if (p) {
-          // impact: cut wide as the last soldier drops (no dwelling)
-          eye.set(0.3, 2.5, -6.0);
-          look.set(3.2, 0.9, -9.4);
-          return;
-        }
-        // moments before the shot: on the woman taking aim
-        eye.set(ctx.trin.x + 1.7, 1.55, ctx.trin.z + 1.5);
-        look.copy(ctx.trin).add(v(0, 1.3, 0));
+        // 3 — the hit, seen: pull off the round onto the man as he is thrown
+        //     back into the stone. Close enough to read, moving away as he
+        //     goes, so the frame is already leaving him as he settles.
+        const since = clamp01((ctx.world.t - (p.born + p.hitDist / p.speed)) / 0.19);
+        const tgt = v(
+          p.from[0] + p.dir[0] * p.hitDist,
+          1.15,
+          p.from[2] + p.dir[2] * p.hitDist,
+        );
+        const px2 = -p.dir[2], pz2 = p.dir[0];
+        eye.set(
+          tgt.x + px2 * (1.5 + since * 1.7) - p.dir[0] * (0.6 + since * 1.5),
+          1.5 + since * 0.75,
+          tgt.z + pz2 * (1.5 + since * 1.7) - p.dir[2] * (0.6 + since * 1.5),
+        );
+        look.set(tgt.x, 1.15 - since * 0.35, tgt.z);
       },
     },
     // 15 — wind-down: slow pan across the wreckage.
@@ -395,9 +561,31 @@ function buildShots(): Shot[] {
       subject: 'final wide',
       t0: 53.6,
       update(ctx, eye, look) {
-        const k = clamp01(ctx.realT / 6);
-        eye.copy(lerpV(v(2.6, 4.7, 13.2), v(1.8, 4.4, 12.2), k));
-        look.set(0, 1.5, -13);
+        // B26/B31: the closing hold is STATIC, framed from the outset so the
+        // tile that lets go is readable where it falls.
+        //
+        // B26 solved the legibility by drifting in onto the near-left column
+        // over 1.5 s. It worked — the slab went from 25 x 52 px (1.9% of a
+        // 1280-wide frame, at 11.6 m and almost edge-on, which is why the gag
+        // was reported as happening off camera) to 74 x 147 px. But a camera
+        // that moves in on a column just before something happens there
+        // announces the joke, and the drift was still running when the tile
+        // went: the gag is at realT 1.8 and the move ended at 1.85.
+        //
+        // So the framing the drift ARRIVED at becomes the framing the shot
+        // opens on, and nothing moves. Measured on this static frame, with no
+        // camera motion helping it, the slab spans 4.7% of the frame width at
+        // separation, 5.9% through the fall and 4.0% at the landing.
+        //
+        // The aim is 0.28 m lower than the drift's end point. Held at that
+        // exact framing the tile landed with its centre 81 px from the bottom
+        // edge and a quarter of it cropped; dropping the aim puts 95% of the
+        // slab inside the frame at the landing without moving the camera and
+        // without losing the wide — the wrecked column is still foreground and
+        // the hall still runs back past the bodies to the elevators, with more
+        // floor and less ceiling, which suits a shot about debris.
+        eye.set(-0.9, 2.7, 5.8);
+        look.set(-2.4, 1.22, -2.5);
       },
     },
   ];

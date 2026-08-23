@@ -56,6 +56,15 @@ export function hashWorld(w: World): number {
     h = fnv(h, q(d.pos[2]));
     h = fnv(h, q(d.size));
   }
+  // B19: which tile let go, when, and where it is on the way down are all
+  // simulation state, so they belong in the replay hash like everything else
+  for (const t of w.tileSlabs) {
+    h = fnv(h, q(t.pos[0]));
+    h = fnv(h, q(t.pos[1]));
+    h = fnv(h, q(t.pos[2]));
+    h = fnv(h, q(t.angle[1]));
+    h = fnv(h, t.landed ? 1 : 0);
+  }
   for (const g of w.droppedGuns) {
     h = fnv(h, q(g.pos[0]));
     h = fnv(h, q(g.pos[2]));

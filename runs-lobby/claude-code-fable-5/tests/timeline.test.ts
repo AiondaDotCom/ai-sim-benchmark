@@ -12,8 +12,28 @@
 import { describe, it, expect } from 'vitest';
 import { shotList } from '../src/render/camera';
 import {
-  SLOWMO, DURATION, DETECTOR_ALARM, detectorLampAt, neoPose, CUES, VO_LINES,
+  SLOWMO,
+  DURATION,
+  DETECTOR_ALARM,
+  detectorLampAt,
+  neoPose,
+  CUES,
+  VO_LINES,
+  SOLDIERS,
+  DEATHS,
+  KILLERS,
+  DEATH_STYLE,
+  soldierBursts,
+  SHOT_PLAN,
+  STANDOFF,
+  COMMAND_T,
+  BREAK_T,
+  DEPLOY_T0,
 } from '../src/sim/timeline';
+import { World } from '../src/sim/world';
+import { ELEVATOR } from '../src/sim/layout';
+import { portalCutouts, claddingLook } from '../src/render/cladding';
+import * as THREE from 'three';
 
 const shots = shotList();
 
@@ -169,5 +189,148 @@ describe('voice lines (A10)', () => {
       expect(sorted[i].t - sorted[i - 1].t,
         `${sorted[i - 1].line} -> ${sorted[i].line}`).toBeGreaterThan(0.8);
     }
+  });
+});
+
+describe('elevator portals stay open (B12)', () => {
+  it('the elevator wall has one cutout per portal, matching the door geometry', () => {
+    const world = new World(42);
+    const slab = world.slabs.find((s) => s.id.startsWith('wallBack'));
+    expect(slab, 'the elevator wall is a damage slab').toBeDefined();
+    const cuts = portalCutouts(slab!);
+    expect(cuts.length, 'one opening per elevator door').toBe(ELEVATOR.doors.length);
+    for (let i = 0; i < cuts.length; i++) {
+      const [u0, v0, u1, v1] = cuts[i];
+      // a real opening, inside the face, the width and height of the portal
+      expect(u1).toBeGreaterThan(u0);
+      expect(u0).toBeGreaterThan(0);
+      expect(u1).toBeLessThan(1);
+      expect(v0).toBe(0);
+      expect((u1 - u0) * slab!.uSize).toBeCloseTo(ELEVATOR.doorW, 5);
+      expect((v1 - v0) * slab!.vSize).toBeCloseTo(ELEVATOR.doorH, 5);
+      // centred on its door
+      const cx = ((u0 + u1) / 2) * slab!.uSize + slab!.origin[0];
+      expect(cx).toBeCloseTo(ELEVATOR.doors[i], 5);
+    }
+  });
+
+  it('every other face is fully clad', () => {
+    const world = new World(42);
+    for (const s of world.slabs) {
+      if (s.id.startsWith('wallBack')) continue;
+      expect(portalCutouts(s).length, `${s.id} has no openings`).toBe(0);
+    }
+  });
+});
+
+describe('cladding material identity (B14)', () => {
+  it('the intact and the cutting granite materials are visually identical', () => {
+    // A face switches material the first time it is hit. If the two differ in
+    // anything that affects how granite looks, a face that has taken a single
+    // bullet changes appearance wholesale and the seam lands on a face
+    // boundary — i.e. a rectangle of mismatched texture.
+    const base = new THREE.MeshStandardMaterial({
+      map: new THREE.Texture(), normalMap: new THREE.Texture(),
+      roughnessMap: new THREE.Texture(), roughness: 0.34, metalness: 0.04,
+      color: 0xe8ece6, envMapIntensity: 0.6,
+    });
+    base.normalScale.set(0.85, 0.85);
+    const plain = base.clone();
+    const cut = plain.clone(); // exactly how Cladding derives the cutting one
+    expect(claddingLook(cut)).toEqual(claddingLook(plain));
+  });
+});
+
+/**
+ * A15: the squad deploys, one command lands, a beat of stillness holds, and
+ * the pair break it. Fitted INTO the existing window rather than inserted —
+ * the music is one track played against simulation time, so adding seconds
+ * anywhere would slide the drop.
+ */
+describe('deployment beat (A15)', () => {
+  it('the squad is large enough to fill the frame, and all of it goes down in the same window', () => {
+    expect(SOLDIERS.length).toBe(16);
+    for (const s of SOLDIERS) {
+      expect(DEATHS[s.id], `${s.id} has a death`).toBeGreaterThan(0);
+      expect(KILLERS[s.id], `${s.id} has a killer`).toBeTruthy();
+      expect(DEATH_STYLE[s.id], `${s.id} has a death style`).toBeTruthy();
+    }
+    // the wind-down is untouched: the last man still goes down at 39.8
+    const last = Math.max(...SOLDIERS.map((s) => DEATHS[s.id]));
+    expect(last).toBe(39.8);
+    // and everyone is in cover before the command
+    for (const s of SOLDIERS) expect(s.enterT + 2.1).toBeLessThan(COMMAND_T + 0.1);
+  });
+
+  it('nobody fires during the held standoff', () => {
+    const [t0, t1] = STANDOFF;
+    for (const s of SOLDIERS) {
+      for (const b of soldierBursts(s)) {
+        expect(b < t0 || b > t1, `${s.id} burst at ${b} is inside the standoff`).toBe(true);
+      }
+    }
+    for (const p of SHOT_PLAN) {
+      expect(p.t < t0 || p.t > t1, `${p.shooter} shot at ${p.t} is inside the standoff`).toBe(true);
+    }
+  });
+
+  it('the protagonists hold fire through the deployment too', () => {
+    // the beat only works if the hall is quiet while the squad sets up
+    const early = SHOT_PLAN.filter((p) => p.t >= DEPLOY_T0 && p.t < BREAK_T);
+    expect(early).toHaveLength(0);
+  });
+
+  it('the command fires once, at the top of the standoff, ducking the music', () => {
+    const cmd = CUES.filter((c) => c.type === 'VO' && c.line === 'vo_freeze');
+    expect(cmd).toHaveLength(1);
+    expect(cmd[0].t).toBe(COMMAND_T);
+    expect(COMMAND_T).toBeLessThan(STANDOFF[0]);
+    const line = VO_LINES.find((v) => v.line === 'vo_freeze')!;
+    expect(line.duck).toBeGreaterThan(0.4);
+    // and nothing else is spoken over the held beat
+    const during = VO_LINES.filter((v) => v.t > STANDOFF[0] && v.t < STANDOFF[1]);
+    expect(during).toHaveLength(0);
+  });
+
+  it('every downstream beat is where it was', () => {
+    // these are the anchors the brief said not to move
+    expect(DEATHS.s0).toBe(20.3);
+    expect(DEATHS.s7).toBe(39.8);
+    const at = (type: string) => CUES.filter((c) => c.type === type).map((c) => c.t);
+    expect(at('HOLSTER')).toEqual([46.6]);
+    expect(at('ELEVATOR')).toEqual([51.5]);
+    expect(at('TILE_GAG')).toEqual([55.4]);
+  });
+});
+
+/**
+ * B21: the bullet-cam has to be able to SHOW its subject.
+ *
+ * The defect was not in the path code — the camera did attach to the round.
+ * It was that the ride lasted 38 ms of simulation and the slow-motion window
+ * ended before the round landed, so a frame a fraction later was already on
+ * the wide cut. These assert the window actually covers the flight.
+ */
+describe('bullet-cam (B21)', () => {
+  it('the slow-motion window opens before the round and runs past the impact', () => {
+    const kill = SHOT_PLAN.find((p) => p.kill === 's7')!;
+    expect(kill).toBeTruthy();
+    // the round is fired at the kill time and crosses its flight at 90 m/s;
+    // the window has to start before it exists (so the muzzle exit is seen)
+    // and still be running when it lands
+    const win = SLOWMO.filter((w) => w.t1 > kill.t - 0.2 && w.t0 < kill.t + 0.3);
+    expect(win.length).toBeGreaterThanOrEqual(1);
+    const opens = Math.min(...win.map((w) => w.t0));
+    const closes = Math.max(...win.map((w) => w.t1));
+    expect(opens).toBeLessThan(kill.t);
+    // 4.4 m at 90 m/s is 49 ms of flight; the old window closed at 39.762,
+    // which is before the impact at 39.749 plus any reaction at all
+    expect(closes).toBeGreaterThan(kill.t + 0.049 + 0.15);
+  });
+
+  it('the last man gets his own reaction, distinct from the other three', () => {
+    expect(DEATH_STYLE.s7).toBe('knockback');
+    const others = Object.entries(DEATH_STYLE).filter(([id]) => id !== 's7');
+    for (const [, style] of others) expect(style).not.toBe('knockback');
   });
 });

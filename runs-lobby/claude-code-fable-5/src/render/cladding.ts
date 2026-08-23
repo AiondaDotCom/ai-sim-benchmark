@@ -12,10 +12,64 @@
  */
 import * as THREE from 'three';
 import { cellSize, type Slab } from '../sim/damage';
+import { ELEVATOR } from '../sim/layout';
 import type { Mats } from './materials';
 
 /** How far the cladding stands proud of the substrate, in metres. */
 export const CLAD_DEPTH = 0.026;
+
+/**
+ * Amplitude of the core's own lumpy relief, in metres. Signed: it both raises
+ * and lowers the surface inside a wound. Kept strictly below the smallest
+ * cavity depth (see CORE_DEPTH) so the raised half can never reach back out
+ * through the cladding — B17.
+ */
+export const LUMP_AMP = 0.026;
+
+/** Cavity depth per surface class, in metres, before the 1.35 shader scale. */
+export const CORE_DEPTH = { column: 0.1, wall: 0.05 };
+
+/**
+ * B17 invariant: where the exposed core patch sits on a face, in face-local
+ * metres.
+ *
+ * Kept as a pure function of the slab so the invariant can be asserted in a
+ * test without a WebGL context — damage may only ever cut INTO the set, so the
+ * patch must stay inside the face's own boundary. It is held CLAD_DEPTH clear
+ * of each edge because every face's core plane is recessed by exactly that
+ * much: two perpendicular patches that each ran to their full face width
+ * crossed past one another at a chewed arris and grew a pale flange standing
+ * outside the column's outline.
+ */
+export function fitPatch(s: {
+  minI: number; maxI: number; minJ: number; maxJ: number;
+  w: number; h: number; uSize: number; vSize: number;
+}, cell: number, margin = 3): { u0: number; u1: number; v0: number; v1: number } {
+  const i0 = Math.max(0, s.minI - margin);
+  const i1 = Math.min(s.w - 1, s.maxI + margin);
+  const j0 = Math.max(0, s.minJ - margin);
+  const j1 = Math.min(s.h - 1, s.maxJ + margin);
+  return {
+    u0: Math.max(CLAD_DEPTH, i0 * cell),
+    u1: Math.min(s.uSize - CLAD_DEPTH, (i1 + 1) * cell),
+    v0: Math.max(CLAD_DEPTH, j0 * cell),
+    v1: Math.min(s.vSize - CLAD_DEPTH, (j1 + 1) * cell),
+  };
+}
+
+/** Compact value noise, shared by the vertex and fragment stages. */
+const NOISE_GLSL = `
+  float dHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+  float dNoise(vec2 p) {
+    vec2 i = floor(p), f = fract(p);
+    vec2 s = f * f * (3.0 - 2.0 * f);
+    float a = dHash(i), b = dHash(i + vec2(1.0, 0.0));
+    float c = dHash(i + vec2(0.0, 1.0)), d = dHash(i + vec2(1.0, 1.0));
+    return mix(mix(a, b, s.x), mix(c, d, s.x), s.y);
+  }
+  float dFbm(vec2 p) {
+    return dNoise(p) * 0.55 + dNoise(p * 2.3 + 17.0) * 0.28 + dNoise(p * 5.1 + 41.0) * 0.17;
+  }`;
 
 const SLAB_UV_DECL = `
   attribute vec2 aSlabUv;
@@ -30,11 +84,49 @@ const SLAB_UV_ASSIGN = `
  * a painted disc. The same displacement pulls the edge of a column face back,
  * which is what chews the silhouette at the arris.
  */
+/** Cladding: plain inward displacement (currently depth 0, kept for clarity). */
 const DISPLACE = `
   {
     float dmgV = texture2D(uDamage, uSubRect.xy + aSlabUv * uSubRect.zw).r;
     transformed -= normal * (uDepth * smoothstep(0.12, 1.0, dmgV));
   }`;
+
+/**
+ * Substrate: cavity depth PLUS its own coarse lumpiness. B13 supplement — the
+ * exposed core is broken masonry, not a plane, so it gets protruding and
+ * recessed pockets and the inside of a wound has real structure and shadow.
+ */
+const DISPLACE_CORE = `
+  {
+    float dmgV = texture2D(uDamage, uSubRect.xy + aSlabUv * uSubRect.zw).r;
+    float deep = smoothstep(0.12, 1.0, dmgV);
+    float lump = (dFbm(aSlabUv * uLumpScale) - 0.5) * 2.0;
+    // B17 invariant: damage REMOVES material, so the core may only ever move
+    // away from the viewer along the face normal. The lump term is signed, so
+    // without this clamp a large enough uLump relative to uDepth would push
+    // the core out in front of the cladding plane and the column would get
+    // thicker where it was shot. max() makes an outward bulge impossible by
+    // construction rather than by a lucky choice of constants.
+    transformed -= normal * max(uDepth * deep + lump * uLump * deep, 0.0);
+  }`;
+
+/**
+ * B12: openings that must never be clad. The elevator wall carries three
+ * portals; without cutting them out of BOTH damage layers the cabs (and the
+ * pair standing in one) sit behind solid granite.
+ */
+function cutoutGlsl(rects: [number, number, number, number][]): string {
+  if (!rects.length) return '';
+  const tests = rects.map(
+    (r) => `if (cUv.x > ${r[0].toFixed(5)} && cUv.x < ${r[2].toFixed(5)}`
+      + ` && cUv.y > ${r[1].toFixed(5)} && cUv.y < ${r[3].toFixed(5)}) discard;`,
+  ).join('\n          ');
+  return `
+        {
+          vec2 cUv = uSubRect.xy + vSlabUv * uSubRect.zw;
+          ${tests}
+        }`;
+}
 
 interface Panel {
   slab: Slab;
@@ -59,19 +151,22 @@ function unitMap(t: THREE.Texture | null): THREE.Texture | null {
   return c;
 }
 
+/**
+ * B14: `base` is ALREADY the plain cladding material, maps and all. Cloning it
+ * means the cutting variant differs from the intact one only in its shader —
+ * never in anything that affects how the granite looks.
+ */
 function makeCladMat(
   base: THREE.MeshStandardMaterial, tex: THREE.Texture, depth: number,
+  cutouts: [number, number, number, number][] = [],
+  texel: THREE.Vector2 = new THREE.Vector2(0.01, 0.01),
 ) {
   const m = base.clone();
-  // the face geometry carries the tiling in its uv, so the maps must not
-  // apply a second repeat on top
-  m.map = unitMap(base.map);
-  m.normalMap = unitMap(base.normalMap);
-  m.roughnessMap = unitMap(base.roughnessMap);
   m.onBeforeCompile = (shader) => {
     shader.uniforms.uDamage = { value: tex };
     shader.uniforms.uDepth = { value: depth };
     shader.uniforms.uSubRect = { value: new THREE.Vector4(0, 0, 1, 1) };
+    shader.uniforms.uCTexel = { value: texel };
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>${SLAB_UV_DECL}
         uniform sampler2D uDamage;
@@ -79,24 +174,51 @@ function makeCladMat(
         uniform vec4 uSubRect;`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>${SLAB_UV_ASSIGN}${DISPLACE}`);
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', `#include <common>
+      .replace('#include <common>', `#include <common>${NOISE_GLSL}
         uniform sampler2D uDamage;
+        uniform vec2 uCTexel;
+        uniform vec4 uSubRect;
         varying vec2 vSlabUv;
         float clHash(vec2 p) {
           return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
         }`)
-      .replace('#include <clipping_planes_fragment>', `
+      .replace('#include <opaque_fragment>', `
         {
-          // The cell grid says WHERE the facing is gone; this hash breaks the
-          // boundary up below cell size, so the fracture edge is jagged
-          // instead of following the grid squares.
+          // thin cracks radiating out of the wound into surviving facing
+          float near = 0.0;
+          near = max(near, texture2D(uDamage, vSlabUv + vec2( uCTexel.x * 3.0, 0.0)).r);
+          near = max(near, texture2D(uDamage, vSlabUv + vec2(-uCTexel.x * 3.0, 0.0)).r);
+          near = max(near, texture2D(uDamage, vSlabUv + vec2(0.0,  uCTexel.y * 3.0)).r);
+          near = max(near, texture2D(uDamage, vSlabUv + vec2(0.0, -uCTexel.y * 3.0)).r);
+          float ridged = 1.0 - abs(dFbm(vSlabUv * 190.0) * 2.0 - 1.0);
+          float crack = smoothstep(0.90, 1.0, ridged) * smoothstep(0.12, 0.55, near);
+          outgoingLight *= 1.0 - 0.7 * crack;
+        }
+        #include <opaque_fragment>`)
+      .replace('#include <clipping_planes_fragment>', `${cutoutGlsl(cutouts)}
+        {
+          // B14/B15: the hash used to be applied at FULL strength everywhere,
+          // so an area hit once (damage 0.63) came out as a ~70/30 stipple of
+          // granite and substrate rather than clean facing or clean core. At
+          // distance that mixture read as a rectangle of mismatched, finer
+          // grain, and the granite pixels that survived inside a wound kept
+          // drawing the tile seam — including its specular highlight — straight
+          // through the exposed core.
+          // Since B13 removes whole fracture plates, the shape already comes
+          // from the plate outline; the hash is now only needed to soften the
+          // 3 cm cell steps, so it is confined to a narrow band at the
+          // boundary and everything else resolves cleanly one way or the other.
           float dmg = texture2D(uDamage, vSlabUv).r;
-          float jag = clHash(floor(vSlabUv * 1400.0)) * 0.42 - 0.21;
+          float band = 1.0 - smoothstep(0.06, 0.22, abs(dmg - 0.5));
+          float jag = (clHash(floor(vSlabUv * 1400.0)) - 0.5) * 0.30 * band;
           if (dmg + jag > 0.5) discard;
+          // B13 supplement: secondary flakes along the broken edge — small
+          // nicks of facing that came away just outside the main wound.
+          if (dmg > 0.24 && clHash(floor(vSlabUv * 620.0) + 3.7) > 0.82) discard;
         }
         #include <clipping_planes_fragment>`);
   };
-  m.customProgramCacheKey = () => 'b8-clad';
+  m.customProgramCacheKey = () => `b8-clad${cutouts.length}`;
   return m;
 }
 
@@ -104,10 +226,15 @@ function makeCladMat(
 function makeSubMat(
   base: THREE.MeshStandardMaterial, tex: THREE.Texture, texel: THREE.Vector2,
   rect: THREE.Vector4, depth: number,
+  cutouts: [number, number, number, number][] = [],
 ) {
   const m = base.clone();
   m.map = unitMap(base.map);
-  m.normalMap = unitMap(base.normalMap);
+  // B13: no normal map. With most of a worked column's facing now gone the
+  // substrate covers a large part of frame, and its grain normals are
+  // redundant with the damage-gradient bump that shades the cavity anyway —
+  // dropping them removes a fetch and the tangent frame per fragment.
+  m.normalMap = null;
   m.roughnessMap = unitMap(base.roughnessMap);
   m.onBeforeCompile = (shader) => {
     shader.uniforms.uDamage = { value: tex };
@@ -118,20 +245,25 @@ function makeSubMat(
     shader.uniforms.uSubRect = { value: rect };
     shader.uniforms.uDepth = { value: depth };
     shader.uniforms.uBump = { value: 1.35 };
+    shader.uniforms.uLump = { value: LUMP_AMP };
+    shader.uniforms.uLumpScale = { value: 26.0 };
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', `#include <common>${SLAB_UV_DECL}
+      .replace('#include <common>', `#include <common>${SLAB_UV_DECL}${NOISE_GLSL}
         uniform sampler2D uDamage;
         uniform float uDepth;
+        uniform float uLump;
+        uniform float uLumpScale;
         uniform vec4 uSubRect;`)
-      .replace('#include <begin_vertex>', `#include <begin_vertex>${SLAB_UV_ASSIGN}${DISPLACE}`);
+      .replace('#include <begin_vertex>', `#include <begin_vertex>${SLAB_UV_ASSIGN}${DISPLACE_CORE}`);
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', `#include <common>
+      .replace('#include <common>', `#include <common>${NOISE_GLSL}
         uniform sampler2D uDamage;
+        uniform float uLumpScale;
         uniform vec2 uTexel;
         uniform vec4 uSubRect;
         uniform float uBump;
         varying vec2 vSlabUv;`)
-      .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+      .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>${cutoutGlsl(cutouts)}
         {
           // A12: relief from the damage field itself. Vertex displacement
           // moves the surface but leaves its normals flat, so a crater would
@@ -147,8 +279,12 @@ function makeSubMat(
           vec3 br1 = cross(bdy, bn);
           vec3 br2 = cross(bn, bdx);
           float bdet = dot(bdx, br1);
-          vec3 bgrad = sign(bdet) * (dFdx(bh) * br1 + dFdy(bh) * br2);
+          // the cavity's own relief shades alongside the wound's depth
+          float lumpH = dFbm(vSlabUv * uLumpScale);
+          float hTotal = bh * 1.0 + lumpH * 0.55;
+          vec3 bgrad = sign(bdet) * (dFdx(hTotal) * br1 + dFdy(hTotal) * br2);
           normal = normalize(abs(bdet) * bn - uBump * bgrad);
+          diffuseColor.rgb *= 0.78 + 0.34 * lumpH;
         }`)
       .replace('#include <opaque_fragment>', `
         {
@@ -174,7 +310,7 @@ function makeSubMat(
         }
         #include <opaque_fragment>`);
   };
-  m.customProgramCacheKey = () => 'b8-sub';
+  m.customProgramCacheKey = () => `b8-sub${cutouts.length}`;
   return m;
 }
 
@@ -247,12 +383,74 @@ function facePlane(
   return geo;
 }
 
+/**
+ * B12: the portal openings of a slab, in its 0..1 face space. Empty for every
+ * face except the elevator wall. Exported so the invariant that the openings
+ * exist, and match the elevator geometry, is testable without a GL context.
+ */
+export function portalCutouts(slab: Slab): [number, number, number, number][] {
+  if (!slab.id.startsWith('wallBack')) return [];
+  const hw = ELEVATOR.doorW / 2;
+  return ELEVATOR.doors.map((dx) => [
+    (dx - hw - slab.origin[0]) / slab.uSize,
+    0,
+    (dx + hw - slab.origin[0]) / slab.uSize,
+    ELEVATOR.doorH / slab.vSize,
+  ] as [number, number, number, number]);
+}
+
+/**
+ * B14: the texture-affecting parameters of a cladding material, so a test can
+ * assert the intact and the cutting variant are identical.
+ */
+export function claddingLook(m: THREE.MeshStandardMaterial): Record<string, number> {
+  const t = m.map;
+  const n = m.normalMap;
+  return {
+    repeatX: t ? t.repeat.x : -1, repeatY: t ? t.repeat.y : -1,
+    offsetX: t ? t.offset.x : -1, offsetY: t ? t.offset.y : -1,
+    hasNormal: n ? 1 : 0,
+    normalX: m.normalScale.x, normalY: m.normalScale.y,
+    roughness: m.roughness, metalness: m.metalness,
+    env: m.envMapIntensity, color: m.color.getHex(),
+    hasRough: m.roughnessMap ? 1 : 0,
+  };
+}
+
 export class Cladding {
   readonly group = new THREE.Group();
   private panels: Panel[] = [];
-  private plainClad: THREE.MeshStandardMaterial | null = null;
+  /** the intact and cutting cladding materials, for the B14 identity check */
+  readonly looks: { plain: THREE.MeshStandardMaterial; cut: THREE.MeshStandardMaterial | null } = { plain: null as unknown as THREE.MeshStandardMaterial, cut: null };
+  private plainClad: THREE.MeshStandardMaterial;
+
+  /**
+   * The live damage grid for a face, as a texture.
+   *
+   * B20: a spall crater in polished stone is only valid while that stone is
+   * still there, so the decal shader has to be able to read the same grid the
+   * cladding reads and clip against it. Exposed here rather than duplicated,
+   * so a mark can never disagree with the wall it sits on.
+   */
+  damageTexFor(slabId: string): THREE.Texture | null {
+    return this.panels.find((p) => p.slab.id === slabId)?.tex ?? null;
+  }
 
   constructor(mats: Mats, slabs: Slab[]) {
+    // Until a face is actually hit it uses a plain shared material: a discard
+    // in the shader disables early-Z for the whole wall, and paying that on
+    // every intact surface cost ~6 fps for nothing.
+    // B14: the cutting material is cloned FROM this one rather than built
+    // alongside it, so the two cannot drift apart in repeat, offset, normal
+    // strength, roughness or envMap intensity. A face that had taken a single
+    // bullet would otherwise change appearance wholesale, and the seam would
+    // land exactly on a face boundary — a rectangle.
+    this.plainClad = mats.marble.clone();
+    this.plainClad.map = unitMap(mats.marble.map);
+    this.plainClad.normalMap = unitMap(mats.marble.normalMap);
+    this.plainClad.roughnessMap = unitMap(mats.marble.roughnessMap);
+    this.looks.plain = this.plainClad;
+
     for (const slab of slabs) {
       const tex = new THREE.DataTexture(
         slab.cells as unknown as Uint8Array<ArrayBuffer>,
@@ -276,19 +474,13 @@ export class Cladding {
 
       // cladding sits ON the original surface plane, so the silhouette of the
       // set is unchanged; the substrate is inset behind it
-      // Until a face is actually hit it uses a plain shared material: a
-      // discard in the shader disables early-Z for the whole wall, and paying
-      // that on every intact surface cost ~6 fps for nothing.
-      if (!this.plainClad) {
-        this.plainClad = mats.marble.clone();
-        this.plainClad.map = unitMap(mats.marble.map);
-        this.plainClad.normalMap = unitMap(mats.marble.normalMap);
-        this.plainClad.roughnessMap = unitMap(mats.marble.roughnessMap);
-      }
       // A12: only what actually gets shot is tessellated. Column faces are
       // 1.3 m wide and their corners form the silhouette, so they get crater
       // scale (6 cm) up to 3.2 m; wall segments are 6 m wide with no
       // silhouette of their own and get a coarser band.
+      // B12: the elevator wall's three portals are holes in both layers
+      const cutouts = portalCutouts(slab);
+      const texel = new THREE.Vector2(1 / slab.w, 1 / slab.h);
       const isCol = slab.id.startsWith('col');
       const cell = isCol ? 0.06 : 0.14;
       const denseTo = isCol ? 3.2 : 2.6;
@@ -298,10 +490,16 @@ export class Cladding {
       // discarded, so the visible profile at a chewed arris is the SUBSTRATE
       // behind it — tessellating the facing as well bought nothing and cost
       // 3.4 fps of median in geometry and vertex texture fetches.
+      // A face with openings needs its own cutting material from the start —
+      // the shared plain one has no cutout, so the portals would stay covered
+      // until the wall happened to take damage (B12).
       const clad = new THREE.Mesh(
         facePlane(slab.uSize, slab.vSize, 0.62, flipU),
-        this.plainClad,
+        cutouts.length
+          ? makeCladMat(this.plainClad, tex, 0, cutouts, texel)
+          : this.plainClad,
       );
+      clad.name = `clad:${slab.id}`;
       clad.rotation.y = rotY;
       clad.position.set(cx, cy, cz);
       if (slab.axis === 0) clad.position.x += dir * 0.002;
@@ -312,12 +510,13 @@ export class Cladding {
       // the substrate is a patch sized to the damaged area, not a second
       // full-size wall drawn behind every intact one
       const sub = new THREE.Mesh(
-        facePlane(1, 1, 0.9, flipU, cell / Math.max(slab.uSize, 0.001), denseTo),
+        facePlane(1, 1, 1, flipU, cell / Math.max(slab.uSize, 0.001), denseTo),
         makeSubMat(
-          mats.substrate, tex, new THREE.Vector2(1 / slab.w, 1 / slab.h),
-          subRect, depth * 1.35,
+          mats.substrate, tex, texel,
+          subRect, depth * 1.35, cutouts,
         ),
       );
+      sub.name = `sub:${slab.id}`;
       sub.visible = false;
       sub.rotation.y = rotY;
       sub.position.set(cx, cy, cz);
@@ -328,7 +527,7 @@ export class Cladding {
       this.panels.push({
         slab, tex, version: 0, clad, sub, cutMat: null,
         subOrigin: sub.position.clone(), subRect,
-        makeCut: () => makeCladMat(mats.marble, tex, 0),
+        makeCut: () => makeCladMat(this.plainClad, tex, 0, cutouts, texel),
       });
     }
   }
@@ -344,23 +543,40 @@ export class Cladding {
       if (!p.cutMat) {
         // first damage on this face: from here it has to cut
         p.cutMat = p.makeCut();
+        if (!this.looks.cut) this.looks.cut = p.cutMat;
         p.clad.material = p.cutMat;
       }
       // fit the substrate patch to the damaged bounds, with a small margin so
       // the rim shading has somewhere to fall off
-      const m = 3;
-      const i0 = Math.max(0, s.minI - m);
-      const i1 = Math.min(s.w - 1, s.maxI + m);
-      const j0 = Math.max(0, s.minJ - m);
-      const j1 = Math.min(s.h - 1, s.maxJ + m);
-      const wCells = i1 - i0 + 1;
-      const hCells = j1 - j0 + 1;
       p.sub.visible = true;
-      p.sub.scale.set(wCells * cellSize, hCells * cellSize, 1);
-      p.subRect.set(i0 / s.w, j0 / s.h, wCells / s.w, hCells / s.h);
+      // B17: work in metres and hold the patch CLAD_DEPTH clear of the face's
+      // own edges. Each face's substrate plane sits CLAD_DEPTH behind its own
+      // cladding, so two perpendicular patches that each ran to their full
+      // face width crossed past one another at a chewed arris — every corner
+      // grew a pale flange standing outside the column's outline. Insetting by
+      // exactly the recess depth makes the two planes meet in the corner
+      // instead of overshooting it.
+      const gridU = s.w * cellSize;
+      const gridV = s.h * cellSize;
+      const { u0, u1, v0, v1 } = fitPatch(s, cellSize);
+      const wW = Math.max(cellSize, u1 - u0);
+      const hW = Math.max(cellSize, v1 - v0);
+      p.sub.scale.set(wW, hW, 1);
+      // B14: the patch geometry is a unit plane scaled to the damaged bbox, so
+      // its uv is 0..1 whatever the patch's world size is. Without driving the
+      // repeat from that size the substrate showed its texture at a different
+      // frequency on every patch — a rectangle of mismatched grain with a hard
+      // seam, which is exactly the artifact reported.
+      const sm = p.sub.material as THREE.MeshStandardMaterial;
+      for (const t of [sm.map, sm.roughnessMap]) {
+        if (t) { t.repeat.set(wW * 0.9, hW * 0.9); t.needsUpdate = true; }
+      }
+      // the damage texture's uv spans the CELL GRID, so the patch's window
+      // into it is expressed against the grid extent, not the face extent
+      p.subRect.set(u0 / gridU, v0 / gridV, wW / gridU, hW / gridV);
       // offset from the face centre, in the plane's local axes
-      const du = ((i0 + i1 + 1) * 0.5 * cellSize) - s.uSize / 2;
-      const dv = ((j0 + j1 + 1) * 0.5 * cellSize) - s.vSize / 2;
+      const du = (u0 + u1) * 0.5 - s.uSize / 2;
+      const dv = (v0 + v1) * 0.5 - s.vSize / 2;
       p.sub.position.copy(p.subOrigin);
       const right = new THREE.Vector3(1, 0, 0).applyEuler(p.sub.rotation);
       p.sub.position.addScaledVector(right, du);

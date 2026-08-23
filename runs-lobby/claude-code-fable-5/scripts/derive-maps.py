@@ -44,6 +44,8 @@ TARGETS = {
     'a11_tactical_weave': (2.6, 0.55, 0.95, True),
     'a11_boot_leather': (2.0, 0.35, 0.80, True),
     'b8_substrate':   (3.0, 0.72, 1.00, True),
+    'a14_field_green': (2.4, 0.55, 0.95, True),
+    'a14_webbing_green': (2.8, 0.58, 0.96, True),
 }
 
 

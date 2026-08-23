@@ -20,6 +20,12 @@ const SFX_NAMES = [
   'grunt_m0', 'grunt_m1', 'grunt_m2', 'grunt_f0',
   'gundrop_0', 'gundrop_1', 'whoosh_0', 'whoosh_1',
   'elevator', 'coat', 'draw',
+  // B19: a whole tile letting go, and coming down
+  'slab_creak', 'slab_crash_0', 'slab_crash_1', 'slab_rubble',
+  // B25: the squad rush
+  'boot_run_0', 'boot_run_1', 'boot_run_2', 'boot_plant', 'gear_rattle',
+  // B28: the blow landing, as distinct from the swing
+  'hit_body_0', 'hit_body_1', 'hit_body_2',
 ];
 
 interface Voice {
@@ -34,12 +40,16 @@ export class AudioEngine {
   private musicSrc: AudioBufferSourceNode | null = null;
   private musicGain: GainNode | null = null;
   private sfxGain: GainNode | null = null;
+  private voiceGain: GainNode | null = null;
+  private master: GainNode | null = null;
+  private analyser: AnalyserNode | null = null;
   private voices: Voice[] = [];
   private director: AudioDirector;
   private timeScale = 1;
   private unlocked = false;
   private musicStartedAtSimT = -1;
   private duckUntil = 0;
+  private sfxDuckUntil = 0;
 
   constructor(seed: number, private volume: number) {
     this.director = new AudioDirector(seed);
@@ -48,12 +58,44 @@ export class AudioEngine {
   async init(): Promise<void> {
     const Ctx = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     this.ctx = new Ctx();
+    // B27: three buses into a master tap.
+    //
+    // The shouted command used to be routed to the MUSIC bus so the effects
+    // duck would not attenuate it — but the same cue ducks the music by 0.88,
+    // so it was routed into the one bus it was itself pulling down 18 dB. That
+    // is why it measured flat against the bed in the rendered mix despite the
+    // sample being normalised to -1.4 dBFS. Voice now has its own bus that
+    // neither duck touches.
+    this.master = this.ctx.createGain();
+    this.master.gain.value = 1;
+    // no compressor or limiter here on purpose: a master limiter would pull a
+    // deliberately loud cue straight back into the bed it is meant to clear
+    this.analyser = this.ctx.createAnalyser();
+    this.analyser.fftSize = 2048;
+    this.master.connect(this.analyser);
+    this.analyser.connect(this.ctx.destination);
+
     this.sfxGain = this.ctx.createGain();
     this.sfxGain.gain.value = this.volume;
-    this.sfxGain.connect(this.ctx.destination);
+    this.sfxGain.connect(this.master);
     this.musicGain = this.ctx.createGain();
     this.musicGain.gain.value = this.volume * 0.9;
-    this.musicGain.connect(this.ctx.destination);
+    this.musicGain.connect(this.master);
+    this.voiceGain = this.ctx.createGain();
+    this.voiceGain.gain.value = this.volume;
+    this.voiceGain.connect(this.master);
+
+    // headless-verification aid (no UI): RMS of the RENDERED mix, so the
+    // command's level can be measured where it actually matters rather than
+    // in the sample or in the intended gain structure.
+    const an = this.analyser;
+    const buf = new Float32Array(an.fftSize);
+    (window as unknown as { __level: () => number }).__level = () => {
+      an.getFloatTimeDomainData(buf);
+      let sum = 0;
+      for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
+      return Math.sqrt(sum / buf.length);
+    };
 
     const load = async (url: string): Promise<AudioBuffer | null> => {
       try {
@@ -105,6 +147,24 @@ export class AudioEngine {
     return this.unlocked;
   }
 
+  /** B25: where the lens is, for distance attenuation. */
+  private listener: [number, number, number] | null = null;
+
+  setListener(x: number, y: number, z: number) {
+    this.listener = [x, y, z];
+  }
+
+  private distanceGain(pos?: number[]): number {
+    if (!pos || !this.listener) return 1;
+    const dx = pos[0] - this.listener[0];
+    const dy = pos[1] - this.listener[1];
+    const dz = pos[2] - this.listener[2];
+    const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    // gentle inverse falloff with a floor, so distant men stay present in the
+    // clatter rather than vanishing — a squad is heard as a body
+    return Math.min(1, 3.2 / Math.max(d, 1.2)) * 0.75 + 0.25;
+  }
+
   /** (Re)start the music aligned to the given simulation time. */
   startMusic(simT: number) {
     this.musicStartedAtSimT = simT;
@@ -139,6 +199,33 @@ export class AudioEngine {
    * score. Duration is in real seconds, so a line inside a slow-motion window
    * keeps the music down for as long as the stretched line actually lasts.
    */
+  /**
+   * B27: pull EVERYTHING else down under a line, not just the music.
+   *
+   * The command was mixed at the same level as any other spoken line and
+   * competed with the alarm and the last boots landing, so it read as somebody
+   * saying the word rather than an order barked across a hall. The line it
+   * introduces is the beat the whole standoff hangs on, so for its duration it
+   * is the loudest thing in the mix by construction.
+   */
+  /** Bus for a cue that is ducking the bed: it must not be on a ducked bus. */
+  private voiceBus(): AudioNode {
+    return this.voiceGain ?? this.sfxGain!;
+  }
+
+  private duckSfx(amount: number, realDuration: number) {
+    if (!this.ctx || !this.sfxGain) return;
+    const g = this.sfxGain.gain;
+    const full = this.volume;
+    const t = this.ctx.currentTime;
+    const until = t + realDuration + 0.2;
+    if (until <= this.sfxDuckUntil) return;
+    this.sfxDuckUntil = until;
+    g.cancelScheduledValues(t);
+    g.setTargetAtTime(full * (1 - amount), t, 0.05);
+    g.setTargetAtTime(full, until, 0.2);
+  }
+
   private duckMusic(amount: number, realDuration: number) {
     if (!this.ctx || !this.musicGain) return;
     const g = this.musicGain.gain;
@@ -166,11 +253,20 @@ export class AudioEngine {
         src.buffer = buf;
         src.playbackRate.value = cmd.rate * this.timeScale;
         const gain = this.ctx.createGain();
-        gain.gain.value = cmd.volume;
+        // B25: a cue that carries a world position is attenuated against the
+        // lens, so the squad gets louder as it comes toward camera and the
+        // far side of the hall sits back. Cues without a position (music
+        // stings, VO, the director's non-diegetic layer) are unaffected.
+        gain.gain.value = cmd.volume * this.distanceGain(cmd.pos);
         src.connect(gain);
-        gain.connect(this.sfxGain);
+        gain.connect(cmd.duckSfx ? this.voiceBus() : this.sfxGain);
         src.start();
-        if (cmd.duck && this.musicGain) this.duckMusic(cmd.duck, buf.duration / Math.max(this.timeScale, 0.05));
+        const dur = buf.duration / Math.max(this.timeScale, 0.05);
+        if (cmd.duck && this.musicGain) this.duckMusic(cmd.duck, dur);
+        // B27: a cue can also clear the effects bed under itself. The voice
+        // is routed to the MUSIC bus rather than the ducked effects bus, so
+        // ducking the bed does not attenuate the line it is clearing space for.
+        if (cmd.duckSfx) this.duckSfx(cmd.duckSfx, dur);
         const voice: Voice = { src, baseRate: cmd.rate };
         this.voices.push(voice);
         src.onended = () => {

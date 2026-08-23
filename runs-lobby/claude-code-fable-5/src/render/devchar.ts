@@ -7,7 +7,7 @@
  * touches this module.
  *
  *   ?dev=char&who=man|woman|guard|soldier
- *          &view=front|side|back|three-quarter|face|hands
+ *          &view=front|side|back|three-quarter|face|hands|grip|grip-far
  *          &pose=idle|aim|run
  *          &silhouette=1     solid black figure on white — the silhouette
  *                            readability check a character artist runs
@@ -39,6 +39,11 @@ const VIEWS: Record<string, { eye: [number, number, number]; look: [number, numb
   'three-quarter': { eye: [2.7, 1.25, 3.1], look: [0, 1.0, 0], fov: 34 },
   face: { eye: [0.5, 1.68, 1.2], look: [0, 1.62, 0], fov: 30 },
   hands: { eye: [0.85, 1.15, 1.25], look: [0.15, 1.05, 0.1], fov: 30 },
+  // B22: the hands view was framed for the unarmed idle pose and looks at the
+  // hip in an aim pose. These frame the weapon hand itself, from two sides, so
+  // the palm/grip relationship can actually be judged.
+  grip: { eye: [1.15, 1.5, 1.15], look: [0.16, 1.3, 0.34], fov: 26 },
+  'grip-far': { eye: [-1.0, 1.62, 1.5], look: [0.16, 1.3, 0.34], fov: 30 },
 };
 
 function poseFor(kind: CharKind, pose: string): ActorSim {
