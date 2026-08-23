@@ -151,6 +151,32 @@ The orchestrator's own lesson from the episode: a verification snapshot is only 
 
 Two caveats against over-reading this. First, the comparison is asymmetric: the Fable run was pushed much harder — eleven requirement changes and eight corrective interventions, most of them added after the Opus run had already been closed — so it has far more surface on which to be judged, while the Opus run is frozen at its pre-A1 state. Second, per the disclosure note above, the later items of the Fable run were carried out by an Opus 5 takeover agent after the Fable session hit its spend limit; the observation here concerns only work committed up to `da18926`, which is Fable 5's own.
 
+## Scene 2 — Fable 5 run, second phase (2026-08-23, operator review against the film)
+
+After the run was first closed at `ee10e68`, the operator reviewed the finished demo frame by frame against the original scene and against his own expectations of what the medium should deliver. That produced a second, much longer phase: **fourteen further corrective interventions (B12–B25) and four further requirement changes (A12–A15)**, all carried out by the Opus 5 takeover agent. It is the most heavily iterated stretch of work in this repository, and the pattern it exposed is the most useful thing in it.
+
+**Almost every defect in this phase was found by the operator, not by the agent's own verification.** The agent's self-checks were rigorous by the standards of this benchmark — it built measurement harnesses, wrote permanent tests, and repeatedly refused to claim what it could not measure. They still missed: elevator cabs behind solid geometry, tile seams drawn straight through stripped areas, bullet-hole decals surviving the facing they were painted on, damage bulging outward so a shot column grew wider, a screen-filling translucent quad, hands rotated a quarter turn on their grips, a camera that shook continuously, and a bullet-cam that never showed a bullet. Each was obvious in a screenshot to a human who knew what the shot was supposed to look like.
+
+Three root causes from this phase are worth keeping, because in each the obvious hypothesis was wrong:
+
+- **The outward bulge** was not a displacement sign error, and not a patch overrunning its face — both were tested and disproved (0.0000 m overhang across 45 slabs). Each face's core plane sits recessed behind *its own* cladding, so at a chewed column corner two perpendicular core planes crossed past one another and grew a flange outside the silhouette. Now an invariant asserted scene-wide, plus a shader clamp making an outward bulge impossible by construction rather than by choice of constants.
+- **The inverted hands** were not a sign error in the wrist swivel. The swivel was applied to the *weapon*, which was a child of the hand — so the gun rotated freely inside a hand that never moved, and the grip-to-palm relationship was never constrained at all. Fixing it revealed why the old seating existed: measured across every armed frame, the roll needed to bring the grip down was 1.571 rad — exactly 90° — because the arm poses had always held the hand a quarter turn from a real shooting grip.
+- **The rectangular damage and the seams surviving inside wounds** were one defect, not two: the cladding discard applied its hash dither at full strength everywhere, stippling intact granite and keeping seam pixels alive inside stripped areas.
+
+Two failures of verification method were named by the agent itself, unprompted, and both are worth more than the fixes:
+
+- **Two shader patches it had reported as working had never compiled.** A frame containing a plausible light cone is not evidence that the star-shaped flash compiled; a failed shader program logs loudly and changes nothing else, which is precisely the defect class screenshots cannot see. The lesson recorded: check the console after shader work, every time.
+- **Its first version of a grip test compared the seating constants against themselves** — tautological, and it passed straight through the bug it was written to catch. A test that asserts a constant against itself is worse than no test, because it converts an open question into false confidence. Rewritten to measure the live transform, the old seating fails three independent tests.
+
+A third came from a rule change the orchestrator imposed. When impacts were split into "first hit scars the facing, accumulated damage strips the chunk", a latent bug surfaced that had been invisible for the entire run: `isStripped()` tested "has any damage" rather than "the facing is gone". Under the previous one-hit-strips model those two questions had identical answers, so nothing could distinguish them; under accumulation they diverged and 120 impacts were misclassified. No test could have caught it while the two questions coincided.
+
+Finally, a measurement lesson the agent applied twice: when the strip percentages appeared to collapse from 75% to 27.9%, it did not accept the number. A column face is 1.3 × 7 m and nothing is fired above about 3 m, so a whole-face percentage is capped near 43% by the height of the column — it measures the column, not the damage. Measured over the band fire can reach, the end state was preserved (67.1 / 63.3 / 62.2%), and the cost of the change was compensated through accumulation and concentration rather than by lowering the threshold until the new mark type stopped appearing.
+
+Orchestrator lessons from the same phase, recorded because they cut the other way:
+
+- **A verification snapshot is evidence only for the moment it was taken.** Two accusations of unfinished work were built on captures that were one and two commits stale by the time they were read. The practice adopted afterwards: state the commit with every capture, and rebuild immediately before shooting.
+- **The agent's own sequencing argument beat the orchestrator's priority order.** Rebuilding the bullet-cam before a requirement change that doubled the defender count would have been wasted work, because the shot targets a specific defender.
+
 ## Interim observations
 
 - **Reported success ≠ working demo.** Two of three completed runs (Sonnet 5, Haiku 4.5) claimed success with passing tests and clean builds, but visual inspection of the actual rendered output found significant defects. Automated tests covered the simulation core, not the visual result.
