@@ -38,10 +38,16 @@ export interface Decal {
 export interface DroppedGun {
   pos: V3; vel: V3; yaw: number; spinY: number; resting: boolean;
 }
+/** Persistent stylized floor blood stain under a downed defender (A4). */
+export interface BloodStain {
+  pos: V3; size: number; rot: number;
+}
 interface Projectile {
   from: V3; dir: V3; speed: number; born: number; hitDist: number;
   impact: { surface: string; pos: V3; normal: V3 } | null;
   shooter: string; done: boolean;
+  /** A5: near-miss round that carries a visible air wake. */
+  wake?: boolean;
 }
 
 const CHEST = 1.35;
@@ -58,6 +64,7 @@ export class World {
   debris: Debris[] = [];
   decals: Decal[] = [];
   droppedGuns: DroppedGun[] = [];
+  bloodStains: BloodStain[] = [];
   projectiles: Projectile[] = [];
   private events: SimEvent[] = [];
 
@@ -68,6 +75,7 @@ export class World {
   private deathList: { t: number; id: string }[] = [];
   private deathIdx = 0;
   private settleIdx = 0;
+  private dodgeIdx = 0;
   private finalCasingDone = false;
   private walkAcc: Record<string, number> = { neo: 0, trin: 0 };
   private lastPos: Record<string, V3 | null> = { neo: null, trin: null };
@@ -133,6 +141,15 @@ export class World {
     while (this.deathIdx < this.deathList.length && this.deathList[this.deathIdx].t <= t) {
       const d = this.deathList[this.deathIdx++];
       this.emit({ type: 'GUARD_DOWN', t: d.t, id: d.id, style: TL.DEATH_STYLE[d.id] });
+      // A4: brief stylized spray + a persistent stain where the defender falls
+      const a = this.actors.get(d.id)!;
+      const p = a.pose.pos;
+      this.emit({ type: 'BLOOD', t: d.t, pos: [p[0], p[1] + 1.25, p[2]] });
+      this.bloodStains.push({
+        pos: [p[0] + rand(this.rng, -0.25, 0.25), 0.006, p[2] + rand(this.rng, -0.25, 0.25)],
+        size: rand(this.rng, 0.55, 0.95),
+        rot: rand(this.rng, 0, Math.PI * 2),
+      });
     }
 
     // 3. Cues.
@@ -179,6 +196,36 @@ export class World {
     // 6. Soldier rounds.
     while (this.roundIdx < this.roundPlan.length && this.roundPlan[this.roundIdx].t <= t) {
       this.fireSoldier(this.roundPlan[this.roundIdx++]);
+    }
+
+    // 6b. A5 dodge volley: scripted near-misses that streak past the
+    // leaning man, each carrying a visible air wake.
+    while (
+      this.dodgeIdx < TL.DODGE_SHOT_TIMES.length &&
+      TL.DODGE_SHOT_TIMES[this.dodgeIdx] <= t
+    ) {
+      const i = this.dodgeIdx++;
+      const s3 = this.actors.get('s3')!;
+      const muzzle: V3 = [s3.pose.pos[0] + 0.4, 1.35, s3.pose.pos[2] + 0.35];
+      // aim above/beside the leaned torso: passes where his chest WAS
+      const target: V3 = [
+        TL.DODGE_POS[0] + (i % 2 === 0 ? -0.18 : 0.22),
+        1.32 + i * 0.09,
+        TL.DODGE_POS[1],
+      ];
+      const dir = norm(sub(target, muzzle));
+      const cast = this.raycastSurfaces(muzzle, dir);
+      const dist = cast ? cast.hit.t : 60;
+      const end: V3 = [muzzle[0] + dir[0] * dist, muzzle[1] + dir[1] * dist, muzzle[2] + dir[2] * dist];
+      if (this.hitsProtagonist(muzzle, end, '')) continue; // must never connect
+      this.projectiles.push({
+        from: muzzle, dir, speed: 90, born: this.t, hitDist: dist,
+        impact: cast ? { surface: cast.surface, pos: cast.hit.point, normal: cast.hit.normal } : null,
+        shooter: 's3', done: false, wake: true,
+      });
+      this.emit({ type: 'WAKE_SHOT', t: this.t, pos: [...muzzle], dir: [...dir] });
+      this.emit({ type: 'SHOT', t: this.t, shooter: 's3', weapon: 'smg', pos: [...muzzle], dir: [...dir] });
+      this.spawnCasing(muzzle, Math.atan2(dir[0], dir[2]));
     }
 
     // 7. Projectiles reaching their impact point.
@@ -261,12 +308,15 @@ export class World {
     return [p.pos[0] + fx * 0.45 + rx * side, y, p.pos[2] + fz * 0.45 + rz * side];
   }
 
-  /** Segment blocked by a protagonist capsule? */
+  /** Segment blocked by a protagonist capsule? (The capsule follows the
+   *  pose: a dodging body is leaned flat backward, so its upright extent
+   *  shrinks — that is exactly what the dodge exploits.) */
   private hitsProtagonist(from: V3, to: V3, exclude: string): string | null {
     for (const id of ['neo', 'trin']) {
       if (id === exclude) continue;
       const a = this.actors.get(id)!;
-      if (segmentHitsCapsule(from, to, a.pose.pos, CAPSULE_H, CAPSULE_R)) return id;
+      const h = a.pose.action === 'dodge' ? 0.85 : CAPSULE_H;
+      if (segmentHitsCapsule(from, to, a.pose.pos, h, CAPSULE_R)) return id;
     }
     return null;
   }

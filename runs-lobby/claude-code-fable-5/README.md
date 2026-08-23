@@ -34,7 +34,10 @@ Example: `http://localhost:5173/?seed=7&timeScale=0.5&volume=1`
 | 8–11.6 | Metal detector **beep**; the guard steps up; the man opens his coat revealing the strapped arsenal. One frozen beat. |
 | 11.6–14 | Eruption: the guard lunges for the radio — the music **drops at exactly 12.0 s** into heavy metal (requirement A1); close-quarters strikes, the woman's flying kick, the alarm. |
 | 14–18 | Eight soldiers pour in from the far service doors and take cover behind the columns; the pair advance, firing. |
+| 15.06–15.3 | **A5 insert:** extreme slow-mo — a round visibly leaves the muzzle: flash, smoke, glowing tracer head, and the ejected casing in one frame. |
 | 18.95–20.25 | **Set piece 1:** the man cartwheels across the open floor firing both pistols — slow-motion window 19.2–20.05 (0.18×) with the camera orbiting while casings hang in the air. |
+| 20.55–20.95 | **A5 insert:** low floor-level slow-mo — brass casings ejecting, spinning, bouncing close to camera. |
+| 23.2–24.6 | **A5 set piece:** the man steps into the open and leans flat back in extreme slow-mo (23.45–24.15, 0.12×) while a scripted four-round volley streaks past overhead, each round trailing visible air-wake rings; the camera orbits the dodge. |
 | 24.9–26.75 | **Set piece 2:** the woman runs up and along the left wall firing mid-run, lands in a crouch, keeps firing — slow-mo 25.35–26.25 (0.2×), tracking camera. |
 | 29.9–33.4 | **Set piece 3:** column-cover spins; emptied guns are flung away (they clatter and stay), fresh ones drawn from under the coat — dual slow-mo orbit 31.5–32.3 (0.2×). |
 | 33.4–40 | Final advance between the column rows; soldiers answer with sustained bursts that chew the marble; hit soldiers crumple, drop, or slide down the columns they leaned on. Last soldier falls at 39.8. |
@@ -74,7 +77,9 @@ src/
                        library (walk, strike, kick, cartwheel, wall run, cover,
                        discard, falls, …), coat dynamics
     effects.ts         instanced casings/debris, persistent decals & craters,
-                       dust, muzzle flashes, tracers, dropped guns
+                       dust, muzzle flashes/smoke, glowing tracer projectiles
+                       with pooled ride-along lights, air-wake rings, blood,
+                       dropped guns
     camera.ts          the cut list: 17 choreographed shots; orbits advance in
                        REAL time so they sweep at full speed during slow-mo
 tests/
@@ -108,7 +113,10 @@ including the music, which keeps the music's 12.0 s drop locked to sim time.
 
 ### Destruction persistence
 
-The damage map (`world.decals`), debris, casings, and dropped guns only ever
+Defender hits show a brief stylized dark-red impact mist; downed defenders
+keep persistent uniform stains and leave a floor stain (A4) — stylized, no
+gore, and the camera never dwells on the fallen. The damage map
+(`world.decals`), debris, casings, blood stains, and dropped guns only ever
 grow; nothing despawns during the sequence (tested: counts are monotone, early
 decals still present and unchanged at the end). The final pan shows the
 accumulated wreckage: ~350 impact decals, ~1500 debris chips, ~370 casings,

@@ -39,6 +39,12 @@ export class AudioDirector {
         return []; // SMG audio handled per burst
       case 'BURST':
         return [{ sample: pick(r, 'smg', 2), volume: 0.6, rate: vary(), category: 'gunshot' }];
+      case 'WAKE_SHOT':
+        // passing near-miss: shot + whizzing deflection tail
+        return [
+          { sample: pick(r, 'smg', 2), volume: 0.5, rate: vary(), category: 'gunshot' },
+          { sample: pick(r, 'ricochet', 2), volume: 0.5, rate: 0.9, category: 'ricochet' },
+        ];
       case 'IMPACT_MARBLE': {
         if (e.t - this.lastImpactT < 0.09) return [];
         this.lastImpactT = e.t;

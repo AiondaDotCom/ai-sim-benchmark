@@ -9,6 +9,8 @@ export type SimEvent =
   | { type: 'CASING_BOUNCE'; t: number; pos: V3 }
   | { type: 'DEBRIS_SETTLE'; t: number; pos: V3 }
   | { type: 'GUARD_DOWN'; t: number; id: string; style: 'crumple' | 'slide' | 'drop' }
+  | { type: 'BLOOD'; t: number; pos: V3 } // brief stylized impact spray (A4)
+  | { type: 'WAKE_SHOT'; t: number; pos: V3; dir: V3 } // A5 dodge near-miss with air wake
   | { type: 'FRIENDLY_HIT'; t: number; shooter: string } // must never occur; asserted in tests
   | { type: 'STRIKE'; t: number; actor: string }
   | { type: 'KICK'; t: number; actor: string }

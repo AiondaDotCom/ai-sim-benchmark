@@ -58,5 +58,10 @@ export function hashWorld(w: World): number {
     h = fnv(h, q(g.pos[2]));
     h = fnv(h, q(g.yaw));
   }
+  for (const b of w.bloodStains) {
+    h = fnv(h, q(b.pos[0]));
+    h = fnv(h, q(b.pos[2]));
+    h = fnv(h, q(b.size));
+  }
   return h >>> 0;
 }

@@ -52,7 +52,10 @@ export const KILLERS: Record<string, 'neo' | 'trin'> = {
 
 interface SlowmoWindow { t0: number; t1: number; scale: number }
 export const SLOWMO: SlowmoWindow[] = [
+  { t0: 15.06, t1: 15.3, scale: 0.05 }, // A5: muzzle-exit insert
   { t0: 19.2, t1: 20.05, scale: 0.18 },
+  { t0: 20.55, t1: 20.95, scale: 0.12 }, // A5: casing close-up insert
+  { t0: 23.45, t1: 24.15, scale: 0.12 }, // A5: bullet-dodge set piece
   { t0: 25.35, t1: 26.25, scale: 0.2 },
   { t0: 31.5, t1: 32.3, scale: 0.2 },
 ];
@@ -183,9 +186,26 @@ export function neoPose(t: number): Pose {
   }
   if (t < 21.1) return still(1.7, 3.9, FACE_ELEV, 'crouchFire', seg(t, 20.25, 21.1));
   if (t < 22.6) return walkPose(t, 21.1, 22.6, [1.7, 3.9], [2.5, 2.75]);
+  if (t < 23.2) {
+    const cyc = t - 22.6;
+    const lean = smooth(0, 0.25, cyc) * (1 - smooth(0.45, 0.6, cyc));
+    return { pos: [2.52, 0, 2.75], yaw: FACE_ELEV, action: 'coverR', phase: lean, speed: 0 };
+  }
+  if (t < 24.6) {
+    // A5 SET PIECE: steps into the open and leans back under passing fire.
+    const k = seg(t, 23.2, 24.6);
+    const mix = Math.max(0, smooth(0, 0.16, k) - smooth(0.8, 1, k));
+    return {
+      pos: [lerp(2.52, DODGE_POS[0], mix), 0, lerp(2.75, DODGE_POS[1], mix)],
+      yaw: FACE_ELEV,
+      action: 'dodge',
+      phase: k,
+      speed: 0,
+    };
+  }
   if (t < 29.9) {
     // Cover behind column at (3.5, 2): lean out cycles.
-    const cyc = (t - 22.6) % 2.4;
+    const cyc = (t - 24.6) % 2.4;
     const lean = cyc < 1.1 ? smooth(0, 0.3, cyc) * (1 - smooth(0.85, 1.1, cyc)) : 0;
     return { pos: [2.52, 0, 2.75], yaw: FACE_ELEV, action: 'coverR', phase: lean, speed: 0 };
   }
@@ -384,10 +404,11 @@ function fillShots(
 
 function buildShotPlan(): PlannedShot[] {
   const out: PlannedShot[] = [];
-  fillShots(out, 'neo', 14.9, 18.3, 0.5, true);
+  fillShots(out, 'neo', 15.1, 18.3, 0.5, true); // first round inside the muzzle insert
   fillShots(out, 'neo', 19.0, 20.2, 0.21, true); // cartwheel
   fillShots(out, 'neo', 20.4, 21.0, 0.4, true);
-  fillShots(out, 'neo', 22.9, 29.7, 0.62);
+  fillShots(out, 'neo', 22.8, 23.15, 0.35); // pauses for the dodge
+  fillShots(out, 'neo', 24.9, 29.7, 0.62);
   fillShots(out, 'neo', 31.0, 33.3, 0.42);
   fillShots(out, 'neo', 33.6, 39.7, 0.48, true);
   fillShots(out, 'trin', 15.3, 18.3, 0.55);
@@ -405,6 +426,11 @@ function buildShotPlan(): PlannedShot[] {
 }
 
 export const SHOT_PLAN: PlannedShot[] = buildShotPlan();
+
+/** A5 bullet-dodge set piece: where the man stands, and the scripted volley
+ *  of near-miss rounds that carry visible air wakes. */
+export const DODGE_POS: [number, number] = [1.35, 3.3];
+export const DODGE_SHOT_TIMES = [23.42, 23.58, 23.76, 23.94];
 
 /** Extra debris trickling down from damaged surfaces during the wind-down. */
 export const SETTLE_TIMES = [40.8, 41.7, 42.9, 44.2];

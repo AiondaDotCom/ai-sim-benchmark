@@ -14,7 +14,8 @@ export interface Mats {
   substrate: THREE.MeshStandardMaterial;
   coat: THREE.MeshStandardMaterial;
   latex: THREE.MeshStandardMaterial;
-  blueShirt: THREE.MeshStandardMaterial;
+  shirt: THREE.MeshStandardMaterial;
+  guardTrouser: THREE.MeshStandardMaterial;
   darkCloth: THREE.MeshStandardMaterial;
   skin: THREE.MeshStandardMaterial;
   skinW: THREE.MeshStandardMaterial;
@@ -29,6 +30,8 @@ export interface Mats {
     substrate: THREE.Texture;
     radialAlpha: THREE.Texture;
     dust: THREE.Texture;
+    blood: THREE.Texture;
+    bloodAlpha: THREE.Texture;
   };
 }
 
@@ -44,6 +47,26 @@ function radialAlphaTexture(): THREE.Texture {
   g.fillRect(0, 0, 128, 128);
   const t = new THREE.CanvasTexture(c);
   return t;
+}
+
+/**
+ * The blood splatter is red-on-black; alphaMap samples the green channel,
+ * so build an alpha texture from the red channel procedurally.
+ */
+function alphaFromRed(img: HTMLImageElement): THREE.Texture {
+  const c = document.createElement('canvas');
+  c.width = img.width;
+  c.height = img.height;
+  const g = c.getContext('2d')!;
+  g.drawImage(img, 0, 0);
+  const data = g.getImageData(0, 0, c.width, c.height);
+  const px = data.data;
+  for (let i = 0; i < px.length; i += 4) {
+    const a = Math.max(px[i], px[i + 1], px[i + 2]);
+    px[i] = px[i + 1] = px[i + 2] = a;
+  }
+  g.putImageData(data, 0, 0);
+  return new THREE.CanvasTexture(c);
 }
 
 function dustSprite(): THREE.Texture {
@@ -81,33 +104,37 @@ export async function loadMats(): Promise<Mats> {
     });
 
   const [
-    marbleT, wallT, floorT, ceilT, metalT, brassT, subT, coatT, latexT, blueT, holeT, crackT,
+    graniteT, floorT, ceilT, metalT, brassT, subT, coatT, latexT, shirtT, holeT, crackT, bloodT,
   ] = await Promise.all([
-    tex('marble_column', [1, 4]),
-    tex('wall_panel', [4, 1.4]),
-    tex('floor_dark', [8, 18]),
+    tex('granite_tile', [1, 5.4]),
+    tex('floor_green', [8, 19]),
     tex('ceiling_coffer', [5, 11]),
     tex('brushed_metal'),
     tex('brass'),
     tex('substrate', [1, 1]),
     tex('coat_fabric', [2.6, 2.6]),
     tex('latex_black', [2, 2]),
-    tex('fabric_blue', [3, 3]),
+    tex('shirt_white', [3, 3]),
     tex('bullet_hole'),
     tex('crack_decal'),
+    tex('blood_stain'),
   ]);
   // independent repeat for the soldiers' dark fatigues
   const darkClothT = coatT.clone();
   darkClothT.needsUpdate = true;
   darkClothT.repeat.set(2.2, 2.2);
+  // wall clone of the granite with wall-scaled tiling
+  const wallGraniteT = graniteT.clone();
+  wallGraniteT.needsUpdate = true;
+  wallGraniteT.repeat.set(12, 2.3);
 
   const M = THREE.MeshStandardMaterial;
   return {
-    marble: new M({ map: marbleT, roughness: 0.26, metalness: 0.05, color: 0xd6dbd4, envMapIntensity: 0.8 }),
-    wall: new M({ map: wallT, roughness: 0.42, metalness: 0.02, color: 0xbfc6bb }),
+    marble: new M({ map: graniteT, roughness: 0.34, metalness: 0.04, color: 0xe8ece6, envMapIntensity: 0.6 }),
+    wall: new M({ map: wallGraniteT, roughness: 0.4, metalness: 0.02, color: 0xd6dcd2 }),
     floorOverlay: new M({
-      map: floorT, roughness: 0.14, metalness: 0.28, color: 0x9fa49e,
-      transparent: true, opacity: 0.76, envMapIntensity: 0.55,
+      map: floorT, roughness: 0.08, metalness: 0.2, color: 0xd2d8d0,
+      transparent: true, opacity: 0.8, envMapIntensity: 0.75,
     }),
     ceiling: new M({ map: ceilT, roughness: 0.8, color: 0x878f86 }),
     metal: new M({ map: metalT, roughness: 0.32, metalness: 0.85, envMapIntensity: 1.0 }),
@@ -118,8 +145,9 @@ export async function loadMats(): Promise<Mats> {
       map: latexT, roughnessMap: latexT, roughness: 0.55, metalness: 0.22,
       color: 0x232328, envMapIntensity: 1.1,
     }),
-    blueShirt: new M({ map: blueT, roughness: 0.66, color: 0xa9cbe8 }),
-    darkCloth: new M({ map: darkClothT, roughness: 0.82, color: 0x494f55 }),
+    shirt: new M({ map: shirtT, roughness: 0.66, color: 0xf0eee6 }),
+    guardTrouser: new M({ map: darkClothT, roughness: 0.8, color: 0x37453a }),
+    darkCloth: new M({ map: darkClothT, roughness: 0.82, color: 0x43484e }),
     skin: new M({ color: 0xc9a186, roughness: 0.6 }),
     skinW: new M({ color: 0xd9b096, roughness: 0.55 }),
     black: new M({ color: 0x0c0c0e, roughness: 0.4 }),
@@ -129,13 +157,15 @@ export async function loadMats(): Promise<Mats> {
       color: 0x8fa79c, roughness: 0.05, metalness: 0.3,
       transparent: true, opacity: 0.28, envMapIntensity: 1.2,
     }),
-    wood: new M({ color: 0x4a4038, roughness: 0.6 }),
+    wood: new M({ color: 0x241d16, roughness: 0.55 }),
     textures: {
       bulletHole: holeT,
       crack: crackT,
       substrate: subT,
       radialAlpha: radialAlphaTexture(),
       dust: dustSprite(),
+      blood: bloodT,
+      bloodAlpha: alphaFromRed(bloodT.image as HTMLImageElement),
     },
   };
 }

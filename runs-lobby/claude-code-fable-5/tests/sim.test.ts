@@ -80,6 +80,10 @@ describe('no friendly fire', () => {
       (e) => e.type === 'SHOT' && (e.shooter === 'neo' || e.shooter === 'trin'),
     );
     expect(protagonistShots.length).toBeGreaterThan(50);
+    // A5: the dodge volley fires all four scripted near-misses — none is
+    // suppressed by the protagonist-hit guard, i.e. every round misses.
+    const wakes = events.filter((e) => e.type === 'WAKE_SHOT');
+    expect(wakes.length).toBe(4);
   });
 
   it('holds for other seeds too', () => {
@@ -95,14 +99,17 @@ describe('destruction persistence', () => {
     let lastDecals = 0;
     let lastDebris = 0;
     let lastCasings = 0;
+    let lastBlood = 0;
     const firstDecalSnapshot: { size: number; pos: number[] }[] = [];
     const { world } = runWorld(42, 41, (w) => {
       expect(w.decals.length).toBeGreaterThanOrEqual(lastDecals);
       expect(w.debris.length).toBeGreaterThanOrEqual(lastDebris);
       expect(w.casings.length).toBeGreaterThanOrEqual(lastCasings);
+      expect(w.bloodStains.length).toBeGreaterThanOrEqual(lastBlood);
       lastDecals = w.decals.length;
       lastDebris = w.debris.length;
       lastCasings = w.casings.length;
+      lastBlood = w.bloodStains.length;
       if (firstDecalSnapshot.length === 0 && w.decals.length > 0) {
         firstDecalSnapshot.push({ size: w.decals[0].size, pos: [...w.decals[0].pos] });
       }
@@ -115,6 +122,8 @@ describe('destruction persistence', () => {
     expect(world.debris.length).toBeGreaterThan(400);
     expect(world.decals.filter((d) => d.kind === 'crater').length).toBeGreaterThan(5);
     expect(world.droppedGuns.length).toBe(3);
+    // A4: one persistent stylized stain per downed defender, never removed
+    expect(world.bloodStains.length).toBe(Object.keys(DEATHS).length);
   });
 });
 

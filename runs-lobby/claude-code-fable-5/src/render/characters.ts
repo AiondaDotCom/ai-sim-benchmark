@@ -151,6 +151,8 @@ export class Character {
   coatOpen = 0;
   /** target hand curl 0 (open) .. 1 (fist/grip); smoothed per frame */
   private curl = 0.45;
+  /** A4: persistent uniform blood stains, shown once the defender is hit */
+  private bloodPatches: THREE.Mesh[] = [];
 
   constructor(kind: CharKind, mats: Mats, scene: THREE.Object3D) {
     this.kind = kind;
@@ -163,6 +165,11 @@ export class Character {
     this.gunsVisible = visible;
   }
 
+  /** A4: reveal the persistent uniform stains when this defender goes down. */
+  showBlood() {
+    for (const p of this.bloodPatches) p.visible = true;
+  }
+
   /** Reset per-run state when the demo loops. */
   reset() {
     this.stridePhase = 0;
@@ -170,6 +177,7 @@ export class Character {
     this.coatOpen = 0;
     this.gunsVisible = false;
     this.curl = 0.45;
+    for (const p of this.bloodPatches) p.visible = false;
   }
 
   // -------------------------------------------------------------- build ---
@@ -207,8 +215,8 @@ export class Character {
     const kind = this.kind;
     const isW = kind === 'trin';
     const bodyMat = kind === 'neo' ? m.coat : kind === 'trin' ? m.latex
-      : kind === 'guard' ? m.blueShirt : m.darkCloth;
-    const legMat = kind === 'guard' ? m.darkCloth : kind === 'trin' ? m.latex : m.trouser;
+      : kind === 'guard' ? m.shirt : m.darkCloth;
+    const legMat = kind === 'guard' ? m.guardTrouser : kind === 'trin' ? m.latex : m.trouser;
     const skinBase = isW ? m.skinW : m.skin;
 
     // subtle deterministic per-character skin variation (no two identical eggs)
@@ -267,6 +275,15 @@ export class Character {
       badge.rotation.x = Math.PI / 2;
       badge.position.set(-0.09, 0.42, 0.1);
       torso.add(badge);
+    }
+    if (kind === 'guard' || kind === 'soldier') {
+      // A4: stylized blood stains on the uniform, hidden until hit
+      const bloodMat = new THREE.MeshStandardMaterial({ color: 0x571411, roughness: 0.45 });
+      const s1 = ellipsoid(bloodMat, 0.055, 1.3, 1.6, 0.3, 0.05, 0.34, kind === 'soldier' ? 0.15 : 0.115, 10);
+      const s2 = ellipsoid(bloodMat, 0.04, 1.1, 1.4, 0.3, -0.07, 0.22, kind === 'soldier' ? 0.145 : 0.11, 8);
+      s1.visible = s2.visible = false;
+      torso.add(s1, s2);
+      this.bloodPatches.push(s1, s2);
     }
     if (kind === 'soldier') {
       // rounded armor vest with pouches
@@ -516,13 +533,14 @@ export class Character {
 
     // hand weapons
     if (kind === 'neo' || kind === 'trin') {
+      // barrel aligned with the hand's reach axis (points where the arm points)
       const gunR = pistolMesh(m);
-      gunR.position.set(0, -0.075, -0.02);
-      gunR.rotation.x = -0.15;
+      gunR.position.set(0, -0.08, -0.01);
+      gunR.rotation.x = -Math.PI / 2 + 0.12;
       handR.group.add(gunR);
       const gunL = pistolMesh(m);
-      gunL.position.set(0, -0.075, -0.02);
-      gunL.rotation.x = -0.15;
+      gunL.position.set(0, -0.08, -0.01);
+      gunL.rotation.x = -Math.PI / 2 + 0.12;
       handL.group.add(gunL);
       gunL.visible = gunR.visible = false;
       rig.gunL = gunL;
@@ -530,8 +548,8 @@ export class Character {
     }
     if (kind === 'soldier') {
       const gun = smgMesh(m);
-      gun.position.set(0, -0.08, -0.06);
-      gun.rotation.x = -0.1;
+      gun.position.set(0, -0.09, -0.03);
+      gun.rotation.x = -Math.PI / 2 + 0.1;
       handR.group.add(gun);
       rig.gunR = gun;
     }
@@ -626,6 +644,9 @@ export class Character {
         break;
       case 'discard':
         this.poseDiscard(p.phase);
+        break;
+      case 'dodge':
+        this.poseDodge(p.phase);
         break;
       case 'cover':
         this.poseSoldierCover(p.phase, actor, aim);
@@ -862,6 +883,29 @@ export class Character {
     } else {
       this.poseDraw();
     }
+  }
+
+  /** A5: the iconic extreme lean-back under passing fire (pivots at heels). */
+  private poseDodge(k: number) {
+    const r = this.rig;
+    const lean = ease(clamp01((k - 0.16) / 0.26)) * (1 - ease(clamp01((k - 0.74) / 0.2)));
+    r.tilt.rotation.x = -1.02 * lean;
+    // braced legs: front leg extended, back leg folded under
+    r.legL.rotation.x = 0.85 * lean;
+    r.shinL.rotation.x = 1.05 * lean;
+    r.legR.rotation.x = 0.3 * lean;
+    r.shinR.rotation.x = 0.55 * lean;
+    r.hips.position.y = HIP_Y - 0.18 * lean;
+    // arched back, head held up watching the rounds pass
+    r.torso.rotation.x = -0.3 * lean;
+    r.head.rotation.x = 0.55 * lean;
+    // arms flung out and back, guns still in hand
+    r.armL.rotation.z = 1.15 * lean;
+    r.armR.rotation.z = -1.25 * lean;
+    r.armL.rotation.x = -0.35 * lean;
+    r.armR.rotation.x = -0.45 * lean;
+    r.foreL.rotation.x = -0.25 * lean;
+    r.foreR.rotation.x = -0.2 * lean;
   }
 
   private poseSoldierCover(lean: number, actor: ActorSim, aim: V3 | null) {

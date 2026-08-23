@@ -102,8 +102,8 @@ export class Lobby {
 
     // elevator bank
     for (const dx of ELEVATOR.doors) {
-      // surround
-      box(ELEVATOR.doorW + 0.5, ELEVATOR.doorH + 0.4, 0.24, mats.metal, dx, (ELEVATOR.doorH + 0.4) / 2, -L + 0.14);
+      // surround (granite, per the film reference)
+      box(ELEVATOR.doorW + 0.5, ELEVATOR.doorH + 0.4, 0.24, mats.marble, dx, (ELEVATOR.doorH + 0.4) / 2, -L + 0.14);
       if (dx === 0) {
         // center elevator: openable double doors + lit cab behind
         const cab = new THREE.Group();
@@ -164,7 +164,7 @@ export class Lobby {
 
     const d = CHECKPOINT.desk;
     box(d.w, d.h, d.d, mats.wood, d.x, d.h / 2, d.z);
-    box(d.w + 0.15, 0.05, d.d + 0.15, mats.metal, d.x, d.h + 0.025, d.z);
+    box(d.w + 0.15, 0.05, d.d + 0.15, mats.gunmetal, d.x, d.h + 0.025, d.z);
     // X-ray belt beside the desk
     box(1.6, 0.82, 0.7, mats.gunmetal, d.x + 0.3, 0.41, d.z + 1.05);
     box(0.5, 0.6, 0.7, mats.black, d.x + 1.0, 1.1, d.z + 1.05);

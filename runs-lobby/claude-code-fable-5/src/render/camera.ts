@@ -129,6 +129,24 @@ function buildShots(): Shot[] {
         look.set(0, 0.7, -7);
       },
     },
+    // 6b — A5 INSERT: the bullet leaves the muzzle — flash, smoke, casing.
+    {
+      t0: 14.95,
+      update(ctx, eye, look) {
+        const k = clamp01(ctx.realT / 4);
+        eye.set(1.55 - k * 0.15, 1.42, 7.95 + k * 0.1);
+        look.set(0.02, 1.36, 8.4);
+      },
+    },
+    // 6c — resume the storm-in coverage.
+    {
+      t0: 15.5,
+      update(ctx, eye, look) {
+        const mid = lerpV(ctx.neo, ctx.trin, 0.5);
+        eye.set(2.4, 3.15, mid.z + 5.5);
+        look.set(0, 0.7, -7);
+      },
+    },
     // 7 — SET PIECE 1: orbit the cartwheel (slow-mo inside).
     {
       t0: 18.5,
@@ -148,12 +166,44 @@ function buildShots(): Shot[] {
         look.copy(ctx.neo).add(v(0, 0.95, 0));
       },
     },
-    // 9 — tracking the woman as she breaks for the left wall.
+    // 8b — A5 INSERT: brass casings as the subject, low near the floor,
+    // while he crouch-fires dual-wield overhead.
+    {
+      t0: 20.45,
+      update(ctx, eye, look) {
+        const k = clamp01(ctx.realT / 4);
+        eye.set(0.35 + k * 0.1, 0.32, 2.75 + k * 0.12);
+        look.copy(ctx.neo).add(v(-0.15, 0.6, -0.15));
+      },
+    },
+    // 8c — resume the low wide.
+    {
+      t0: 21.0,
+      update(ctx, eye, look) {
+        eye.set(-2.0, 0.9, -2.4);
+        look.copy(ctx.neo).add(v(0, 0.95, 0));
+      },
+    },
+    // 9 — brief cut: the woman breaks for the left wall.
     {
       t0: 22.7,
       update(ctx, eye, look) {
         eye.set(Math.max(ctx.trin.x + 3.4, -4.3), 1.7, ctx.trin.z - 3.3);
         look.copy(ctx.trin).add(v(0, 1.2, 0));
+      },
+    },
+    // 9b — A5 SET PIECE: extreme slow-mo bullet dodge, orbiting ellipse
+    // (x-radius 1.5 keeps the lens clear of the column row).
+    {
+      t0: 23.15,
+      update(ctx, eye, look) {
+        const a = 1.05 + ctx.realT * 0.5;
+        eye.set(
+          1.35 + Math.sin(a) * 1.5,
+          1.3 + Math.sin(ctx.realT * 0.7) * 0.2,
+          3.3 + Math.cos(a) * 2.6,
+        );
+        look.set(1.35, 1.02, 3.3);
       },
     },
     // 10 — SET PIECE 2: alongside the wall run (slow-mo inside).

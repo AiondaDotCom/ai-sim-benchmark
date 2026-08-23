@@ -106,11 +106,11 @@ Higher-quality video with the generated soundtrack and sound effects: [demo.mp4]
 
 ### Claude Code — Fable 5
 
-Passed after 1 corrective intervention (frozen prompt + requirement changes A1/A2, 2026-08-23): the first render pass was far too bright and clinical — the film's dark desaturated green-grey grade was missing, walls read as flat white plaster, and the generated fabric textures did not visibly render on the characters. After the correction the agent rebuilt the look in-scene (dark green-graded lighting with a blown-out entrance, regenerated stone-panel and high-contrast marble textures, readable fabric weave, face details) and re-verified every acceptance beat itself. Implements A1 (heavy-metal drop synchronized to the eruption at second 12, measured +9.4 dB) and A2 (procedural characters with capsule anatomy, articulated hands, draped coat — no Blender needed). 9/9 tests, 47 generated asset files, fully offline. Details in [INTERVENTIONS.md](INTERVENTIONS.md).
+Passed after 1 corrective intervention (frozen prompt + requirement changes A1–A5, 2026-08-23): the first render pass was far too bright and clinical — the film's dark desaturated green-grey grade was missing and the generated fabric textures did not visibly render on the characters (B1). The run then absorbed four further requirement changes cleanly: A2 characters beyond box primitives, A3 film-reference set corrections (dark speckled-granite tiles chipping pale, green-veined marble floor, white-shirted guards, deep teal grade — derived from a frame-by-frame review of the original scene), A4 stylized blood (persistent, hash-covered sim state — **note: the demo contains stylized blood; mark clips as sensitive where platforms require it**), and A5 a ballistics VFX package (glowing tracer projectiles that light nearby surfaces, slow-motion muzzle-exit and casing close-up inserts, and a bullet-dodge set piece with air-wake ripple trails). Implements A1 as a heavy-metal drop synchronized to the eruption. 9/9 tests, fully offline, all assets generated in-run, no API keys ever committed. Details in [INTERVENTIONS.md](INTERVENTIONS.md).
 
 ![Claude Code Fable 5 lobby shootout demo](runs-lobby/claude-code-fable-5/docs/demo.gif)
 
-*(GIF plays at 4× speed; the sequence runs ~70 s in real time.)*
+*(GIF plays at 4.5× speed; the sequence runs ~84 s in real time.)*
 
 Higher-quality video with the generated soundtrack and sound effects: [demo.mp4](runs-lobby/claude-code-fable-5/docs/demo.mp4) · Source: [`runs-lobby/claude-code-fable-5/`](runs-lobby/claude-code-fable-5/)
 

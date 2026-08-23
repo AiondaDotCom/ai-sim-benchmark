@@ -9,7 +9,7 @@ Reproduction scripts: `scripts/gen-textures.sh` (Codex CLI), `scripts/gen-sfx.sh
 AceDataCloud, token via `SUNO_TOKEN` env var). No credentials are stored in the
 repository.
 
-## Textures — `public/assets/textures/` (12 files)
+## Textures — `public/assets/textures/` (16 files)
 
 Tool: **Codex CLI image generation** (`codex exec … "Generate an image: <prompt>"`).
 
@@ -32,6 +32,16 @@ lists the prompts that produced the current files.
 | `bullet_hole.png` | a single bullet impact crater in marble seen straight on, dark deep center hole with radial cracks and chipped bright edges, on a pure black background, centered, photorealistic, 1024x1024 |
 | `crack_decal.png` | white radial impact crack pattern radiating from a central point, thin branching fracture lines, pure white lines on pure black background, centered, 1024x1024 |
 | `wall_panel.png` | texture of a large stone wall made of big rectangular pale grey-green marble panels separated by thin dark recessed seams in a regular grid, each panel with clearly visible darker marble veining, institutional government lobby wall, photorealistic, flat frontal view, even lighting, high contrast, 1024x1024 |
+| `granite_tile.png` (A3) | one single large square tile of dark grey-green speckled salt-and-pepper granite filling the whole image, dense fine black, white and grey speckles on a dark green-grey base, a thin darker recessed seam border along all four edges of the tile, polished institutional stone, DARK overall tone, photorealistic, flat frontal view, even diffuse lighting, tiles seamlessly when repeated, 1024x1024 |
+| `floor_green.png` (A3) | seamless tileable texture of polished dark green marble, deep forest-green stone with elegant pale white-green veining, large square floor tiles with thin seams, glossy reflective surface, dark overall, photorealistic, flat frontal view, even lighting, 1024x1024 |
+| `shirt_white.png` (A3) | seamless tileable close-up texture of white cotton uniform shirt fabric with clearly visible woven thread structure and subtle soft wrinkles, slightly warm off-white, photorealistic, even lighting, 1024x1024 |
+| `blood_stain.png` (A4) | an irregular dark red blood splatter stain seen from directly above, deep desaturated dark crimson on a pure black background, organic splatter shape with a denser center and thin spray droplets at the edges, matte, stylized film prop blood, centered, 1024x1024 |
+
+A3 set change: the hall now uses `granite_tile.png` (columns, walls, elevator
+surrounds) and `floor_green.png`; guards wear `shirt_white.png`. The earlier
+`marble_column.png`, `wall_panel.png`, `floor_dark.png` and `fabric_blue.png`
+remain in the repository as superseded generations (script:
+`scripts/gen-textures-a3.sh`).
 
 (Two tiny helper textures — a radial alpha falloff and a soft dust sprite — are
 generated procedurally in code at runtime, `src/render/materials.ts`.)

@@ -7,7 +7,7 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 import { parseConfig } from './config';
 import { World } from './sim/world';
 import { FixedStepper } from './sim/stepper';
-import { DURATION, SOLDIERS, GUARDS } from './sim/timeline';
+import { DURATION, SOLDIERS, GUARDS, DEATHS } from './sim/timeline';
 import { loadMats } from './render/materials';
 import { Lobby } from './render/lobby';
 import { Character } from './render/characters';
@@ -28,21 +28,21 @@ document.body.appendChild(renderer.domElement);
 renderer.clear();
 
 const scene = new THREE.Scene();
-// the signature look: moody desaturated green-grey, falloff into the hall
-scene.background = new THREE.Color(0x49564c);
-scene.fog = new THREE.FogExp2(0x49564c, 0.026);
+// the signature look: deep teal-green with heavy shadow falloff
+scene.background = new THREE.Color(0x24352e);
+scene.fog = new THREE.FogExp2(0x24352e, 0.028);
 
-scene.add(new THREE.HemisphereLight(0x9fb6a0, 0x20261f, 0.55));
+scene.add(new THREE.HemisphereLight(0x6f9c8b, 0x141f19, 0.62));
 // key: cold daylight pouring in from the entrance glazing (+Z end)
-const key = new THREE.DirectionalLight(0xe6f5df, 1.8);
+const key = new THREE.DirectionalLight(0xd8f2e6, 1.8);
 key.position.set(2, 9, 30);
 scene.add(key);
-const fill = new THREE.DirectionalLight(0x66766a, 0.35);
+const fill = new THREE.DirectionalLight(0x3c5a4d, 0.35);
 fill.position.set(-8, 10, -14);
 scene.add(fill);
-// ceiling fixtures: pools of green-white light with real falloff
+// ceiling fixtures: pools of teal-white light with real falloff
 for (const z of [10, 0, -10]) {
-  const pt = new THREE.PointLight(0xd2eccb, 10, 13, 2);
+  const pt = new THREE.PointLight(0xc2ead6, 9, 13, 2);
   pt.position.set(0, 6.3, z);
   scene.add(pt);
 }
@@ -91,6 +91,9 @@ async function boot() {
     if (t > 9.7) chars.get('neo')!.coatOpen = 1;
     if (t >= 14.7 && t < 46.9) chars.get('neo')!.setGuns(true);
     if (t >= 15.0 && t < 46.9) chars.get('trin')!.setGuns(true);
+    for (const [id, deathT] of Object.entries(DEATHS)) {
+      if (t > deathT) chars.get(id)?.showBlood();
+    }
   }
   let stepper = new FixedStepper(world, cfg.timeScale);
   const director = new CameraDirector(window.innerWidth / window.innerHeight, cfg.camShake);
@@ -116,6 +119,7 @@ async function boot() {
 
     // weapon visibility follows the choreography events
     for (const e of events) {
+      if (e.type === 'GUARD_DOWN') chars.get(e.id)?.showBlood();
       if (e.type === 'DRAW') chars.get(e.actor)?.setGuns(true);
       if (e.type === 'GUN_DROP') {
         // find who dropped: nearest protagonist
@@ -133,8 +137,8 @@ async function boot() {
     for (const [id, ch] of chars) ch.update(world.actors.get(id)!, world.t);
     lobby.update(world.t);
     effects.onEvents(events, 1 / Math.max(stepper.scale(), 0.05));
-    effects.update(world, simDt);
     director.update(world, realDt);
+    effects.update(world, simDt, director.camera.position);
 
     renderer.render(scene, director.camera);
     // headless-verification aid (no UI): current sim time on the window
