@@ -131,6 +131,18 @@ Run date **2026-08-22**. Started 16:56 with the frozen prompt verbatim, same set
 
 Metadata (recorded, not scored): elapsed ~59 min wall clock incl. all rounds (initial ~11 min + B1 ~3 min + E1 ~36 min + B2 ~4 min); 172 assistant turns; tokens 941,959 input / 45,341 output + 73,085 reasoning / 16,739,712 cache read; cost $2.20 (OpenRouter).
 
+## Scene 2: interim comparative observation (Opus 5 vs. Fable 5)
+
+Both lobby runs received the identical frozen prompt, which states that under fire "the polished veneer shatters off in palm-sized chips … craters expose the rough grey substrate beneath" — i.e. a two-layer construction: cladding over a different core material.
+
+**Opus 5 built exactly that, unprompted, in its first delivery.** Its damage model is first-class simulation state: per-slab veneer/crater byte maps in `src/sim/damage.ts` driving a shader in `src/render/slabs.ts` that blends cladding into substrate along a hash-ragged edge, with perturbed normals and vertex displacement. The concept is spread across both layers of the architecture (`sim/damage.ts`, `sim/world.ts`, `render/slabs.ts`, `render/textures.ts`), which is what a genuine two-layer model looks like.
+
+**Fable 5 approximated the same requirement with single-layer decals.** In its run the concept appears essentially only on the rendering side (`render/effects.ts`, `render/materials.ts`): hits paint pale crater decals onto the cladding. It satisfies the sentence loosely — damage is visible and persistent — but the wall never physically loses its facing, and the operator's review of the rendered result identified precisely that (logged as B8, sent long after the run's other corrections).
+
+The pattern this suggests, stated cautiously because it rests on two runs: **Fable 5 was the stronger executor, Opus 5 the stronger reader of the reference.** Fable delivered its first working version markedly faster (~54 min vs. ~82 min), followed the added API-key security instruction without being reminded, and absorbed an unusually long series of requirement changes (A1–A11) and corrective interventions (B1–B8) cleanly, including several fixes that went beyond what was reported to it. But on multiple occasions it modelled the *words* of the brief rather than the physical situation they describe: single-layer damage instead of cladding over substrate; a checkpoint metal detector without an alarm lamp; elevator doors that vanished into a solid granite slab during a retexture and were not noticed. Opus 5 produced fewer such gaps unprompted, and its own self-verification caught seven rendering bugs before it ever reported.
+
+Two caveats against over-reading this. First, the comparison is asymmetric: the Fable run was pushed much harder — eleven requirement changes and eight corrective interventions, most of them added after the Opus run had already been closed — so it has far more surface on which to be judged, while the Opus run is frozen at its pre-A1 state. Second, per the disclosure note above, the later items of the Fable run were carried out by an Opus 5 takeover agent after the Fable session hit its spend limit; the observation here concerns only work committed up to `da18926`, which is Fable 5's own.
+
 ## Interim observations
 
 - **Reported success ≠ working demo.** Two of three completed runs (Sonnet 5, Haiku 4.5) claimed success with passing tests and clean builds, but visual inspection of the actual rendered output found significant defects. Automated tests covered the simulation core, not the visual result.
