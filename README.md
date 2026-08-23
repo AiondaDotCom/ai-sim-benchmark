@@ -112,7 +112,7 @@ Final state: a dark teal-graded granite hall where the cladding is a real second
 
 ![Claude Code Fable 5 lobby shootout demo](runs-lobby/claude-code-fable-5/docs/demo.gif)
 
-*(GIF plays at 5× speed; the sequence runs ~106 s in real time. Recorded with `?loop=0` so it ends on the closing hold rather than restarting.)*
+*(GIF plays at 4.5× speed; the recording runs 95 s, cut on the closing hold. Captured with `?loop=0` so it ends there rather than restarting; the full sequence runs a little longer in the demo itself.)*
 
 Higher-quality video with the generated soundtrack and sound effects: [demo.mp4](runs-lobby/claude-code-fable-5/docs/demo.mp4) · Source: [`runs-lobby/claude-code-fable-5/`](runs-lobby/claude-code-fable-5/)
 
