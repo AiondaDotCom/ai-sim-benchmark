@@ -131,6 +131,18 @@ Run date **2026-08-22**. Started 16:56 with the frozen prompt verbatim, same set
 
 Metadata (recorded, not scored): elapsed ~59 min wall clock incl. all rounds (initial ~11 min + B1 ~3 min + E1 ~36 min + B2 ~4 min); 172 assistant turns; tokens 941,959 input / 45,341 output + 73,085 reasoning / 16,739,712 cache read; cost $2.20 (OpenRouter).
 
+### OpenCode — Qwen 3.8 27B, local (`runs/opencode-qwen3.8-27b/`)
+
+Run date **2026-08-25**. Frozen prompt from [PROMPT.md](PROMPT.md) verbatim, run via OpenCode against a **locally hosted** `qwen3.8-27b` on a Mac Studio M3 Ultra (256 GB unified memory) — the first run in this repository generated without cloud inference, and the smallest model recorded here by parameter count. Deviations, unchanged from the other post-freeze runs: generation ran on the host rather than in a disposable VM, and the evaluator was not independent.
+
+| # | Time | Message | Outcome |
+| --- | --- | --- | --- |
+| B1–B4 | — | Four or more follow-up prompts asking for **stronger visual effects** (rain, water surface, lighting/grade). Not defect reports: the demo already ran correctly at that point, and none of these prompts repaired broken behavior. | Absorbed; the final state carries the richer effect stack described in the run's own README (shadow-mapped sun with a lake glint, depth-faded water with clearcoat and ripple, rain, drifting clouds, bloom + vignette/grain film grade). |
+
+**Run verdict: PASSED with 0 corrective interventions, but not autonomously polished.** The follow-ups are logged as B because they are additional human input and the protocol counts every follow-up message — but they are polish requests, not corrections, so this run is *not* equivalent to Kimi K3's zero-intervention run in either direction: nothing had to be fixed, and the recorded visual quality is partly operator-directed rather than agent-chosen. Independent verification of the final state on 2026-08-25: 19/19 tests green (terrain determinism, mass conservation to < 1e-4, downhill flow, long-run stability), `tsc` + production build clean, and the preview build renders a working scene in the browser — a sealed caldera island where rain, three mountain springs and a carved river feed one central lake that holds a steady level under evaporation, with shadowed walls, sun glint on the water, rain and a ~115 s camera orbit. Architecturally as required: `src/sim/` is pure TypeScript with no Three.js or DOM imports, rendering in `src/render/`, configuration via URL parameters only. Final state recorded in `runs/opencode-qwen3.8-27b/docs/demo.gif`.
+
+Record-keeping note: this entry was written after the fact from the operator's account. The exact wording, count beyond "four or more", and timestamps of the effect prompts were not captured during the run, and no token/cost metadata is available for it.
+
 ## Scene 2: interim comparative observation (Opus 5 vs. Fable 5)
 
 Both lobby runs received the identical frozen prompt, which states that under fire "the polished veneer shatters off in palm-sized chips … craters expose the rough grey substrate beneath" — i.e. a two-layer construction: cladding over a different core material.
