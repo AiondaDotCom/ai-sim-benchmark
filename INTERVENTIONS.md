@@ -133,7 +133,7 @@ Metadata (recorded, not scored): elapsed ~59 min wall clock incl. all rounds (in
 
 ### OpenCode — Qwen 3.8 27B, local (`runs/opencode-qwen3.8-27b/`)
 
-Run date **2026-08-25**. Frozen prompt from [PROMPT.md](PROMPT.md) verbatim, run via OpenCode against a **locally hosted** `qwen3.8-27b` on a Mac Studio M3 Ultra (256 GB unified memory) — the first run in this repository generated without cloud inference, and the smallest model recorded here by parameter count. Deviations, unchanged from the other post-freeze runs: generation ran on the host rather than in a disposable VM, and the evaluator was not independent.
+Run date **2026-08-25**. Frozen prompt from [PROMPT.md](PROMPT.md) verbatim, run via OpenCode against a **locally hosted** `qwen3.8-27b` on a Mac Studio M3 Ultra with 256 GB of RAM (unified memory) — the first run in this repository generated without cloud inference, and the smallest model recorded here by parameter count. Deviations, unchanged from the other post-freeze runs: generation ran on the host rather than in a disposable VM, and the evaluator was not independent.
 
 | # | Time | Message | Outcome |
 | --- | --- | --- | --- |
