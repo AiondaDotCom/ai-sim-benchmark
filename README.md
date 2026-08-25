@@ -88,6 +88,14 @@ Passed after 2 corrective interventions (frozen prompt, 2026-08-22): a `/tmp` sa
 
 Higher-quality video: [demo.mp4](runs/opencode-deepseek-v4-pro/docs/demo.mp4) · Source: [`runs/opencode-deepseek-v4-pro/`](runs/opencode-deepseek-v4-pro/)
 
+### OpenCode — Qwen 3.8 27B
+
+Recorded 2026-08-25 with the frozen prompt. The smallest model recorded here by parameter count, and the only run that produced a **caldera island** rather than an open mountain slope: a sealed rim wall funnels rain, three mountain springs, and a carved river channel into one central lake, so the water budget stays visibly closed and evaporation holds the lake level steady. 19/19 tests (terrain determinism, mass conservation to < 1e-4, downhill flow, long-run stability), clean `tsc` build, and a rendered scene verified in the browser: shadowed caldera walls, a depth-faded lake with a sun glint, rain, drifting clouds, and a ~115 s camera orbit.
+
+![OpenCode Qwen 3.8 27B water simulation demo](runs/opencode-qwen3.8-27b/docs/demo.gif)
+
+Higher-quality video: [demo.mp4](runs/opencode-qwen3.8-27b/docs/demo.mp4) · Source: [`runs/opencode-qwen3.8-27b/`](runs/opencode-qwen3.8-27b/)
+
 All follow-up messages that had to be sent to the agents (requirement changes and corrective interventions) are documented in [INTERVENTIONS.md](INTERVENTIONS.md).
 
 ## Scene 2: Lobby shootout ("Game 2")
@@ -118,7 +126,7 @@ Higher-quality video with the generated soundtrack and sound effects: [demo.mp4]
 
 ## Status of the recorded runs
 
-The first six runs in `runs/` are a **pilot round, not a protocol-conformant comparison.** They were carried out while the task requirements were still changing. The deviations below are documented rather than hidden; read the results as individual case studies, not as a ranking. The runs recorded after the prompt freeze (OpenCode — Kimi K3, Ox Alpha, DeepSeek V4 Pro) received the frozen prompt verbatim, but still share two deviations with the pilot round: generation ran on the host instead of a disposable VM, and the evaluator was the same non-independent orchestrating session.
+The first six runs in `runs/` are a **pilot round, not a protocol-conformant comparison.** They were carried out while the task requirements were still changing. The deviations below are documented rather than hidden; read the results as individual case studies, not as a ranking. The runs recorded after the prompt freeze (OpenCode — Kimi K3, Ox Alpha, DeepSeek V4 Pro, Qwen 3.8 27B) received the frozen prompt verbatim, but still share two deviations with the pilot round: generation ran on the host instead of a disposable VM, and the evaluator was the same non-independent orchestrating session.
 
 **The prompt was not identical across runs.** The three requirement changes (A1–A3 in [INTERVENTIONS.md](INTERVENTIONS.md)) were introduced while runs were already in progress, so each run received them at a different point:
 
@@ -133,6 +141,7 @@ The first six runs in `runs/` are a **pilot round, not a protocol-conformant com
 | OpenCode — Kimi K3 | frozen prompt from PROMPT.md verbatim |
 | OpenCode — Ox Alpha | frozen prompt from PROMPT.md verbatim |
 | OpenCode — DeepSeek V4 Pro 0813 | frozen prompt from PROMPT.md verbatim |
+| OpenCode — Qwen 3.8 27B | frozen prompt from PROMPT.md verbatim |
 
 Fable 5 therefore built against a different target than the later runs and had to retrofit two requirements afterwards. Its result is not directly comparable to the rest.
 
@@ -142,7 +151,7 @@ Fable 5 therefore built against a different target than the later runs and had t
 
 **What this does not affect.** Haiku 4.5 and Grok both received the complete final prompt and failed under the best available conditions, so their outcomes are not explained by prompt drift. The fabricated execution reports documented for Grok were established against filesystem timestamps, independently of any prompt question.
 
-A fully conformant round requires both the prompt frozen before the first run and evaluation by a party that is not itself one of the contestants. The pilot round satisfies neither; the post-freeze runs (OpenCode — Kimi K3, Ox Alpha, DeepSeek V4 Pro) satisfy the first condition but not the second.
+A fully conformant round requires both the prompt frozen before the first run and evaluation by a party that is not itself one of the contestants. The pilot round satisfies neither; the post-freeze runs (OpenCode — Kimi K3, Ox Alpha, DeepSeek V4 Pro, Qwen 3.8 27B) satisfy the first condition but not the second.
 
 ## Benchmark prompt
 
