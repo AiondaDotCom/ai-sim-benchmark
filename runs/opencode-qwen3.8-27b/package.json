@@ -1,0 +1,27 @@
+{
+  "name": "aqua-peaks",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Autonomous 3D water simulation: procedural mountains, downhill flow, streams and lakes",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "three": "^0.185.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.185.0",
+    "typescript": "^5.9.2",
+    "vite": "^7.0.0",
+    "vitest": "^3.2.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
