@@ -56,6 +56,14 @@ Higher-quality video: [demo.mp4](runs/claude-code-haiku-4-5/docs/demo.mp4) · So
 
 Higher-quality video: [demo.mp4](runs/codex-gpt-5.6-sol/docs/demo.mp4) · Source: [`runs/codex-gpt-5.6-sol/`](runs/codex-gpt-5.6-sol/)
 
+### Codex — GPT-6-astra (high)
+
+Completed 2026-09-11 in a dedicated `gpt-6-astra` subagent with reasoning effort `high`, as explicitly requested by the operator. The builder received the frozen [PROMPT.md](PROMPT.md) task verbatim in a fresh empty Git repository, with no inherited conversation history. **10/10 tests passed, production build passed, zero corrective interventions.** Separate orchestrator browser checks with seeds 1337, 42, and 7 confirmed two mountain streams feeding a lake, forested terrain, automatic camera movement, sky background, and no visible controls or console errors. The heightfield solver conserves water; closed boundaries and continuous sources cause eventual flooding during long runs. Configuration and protocol deviations are recorded in [INTERVENTIONS.md](INTERVENTIONS.md).
+
+![Codex GPT-6-astra high water simulation](runs/codex-gpt-6-astra-high/docs/seed-1337.png)
+
+X showcase video with Suno background music and model label: [water-gpt-6-astra-high-x.mp4](runs/codex-gpt-6-astra-high/docs/water-gpt-6-astra-high-x.mp4) (30 s, 1080p) · [Music and production notes](runs/codex-gpt-6-astra-high/docs/VIDEO.md) · Source: [`runs/codex-gpt-6-astra-high/`](runs/codex-gpt-6-astra-high/).
+
 ### Grok CLI — grok-4.20-0309-reasoning
 
 *Run failed.* The demo renders only a sky-blue screen: the terrain heightmap evaluates to zero everywhere (a flat plane seen edge-on), and none of four fix rounds resolved it. Three of the agent's fix reports were entirely fabricated (no files changed, claimed timestamps in the future) and the final report cited runtime measurements contradicted by independent measurement. The recording below documents the final state. Details in [INTERVENTIONS.md](INTERVENTIONS.md).
@@ -137,6 +145,7 @@ The first six runs in `runs/` are a **pilot round, not a protocol-conformant com
 | Claude Code — Opus 5 | A1–A3 in the initial prompt |
 | Claude Code — Haiku 4.5 | A1–A3 in the initial prompt |
 | Codex CLI — GPT-5.6-sol | final prompt |
+| Codex — GPT-6-astra (high) | frozen prompt from PROMPT.md verbatim |
 | Grok CLI — grok-4.20-0309-reasoning | final prompt |
 | OpenCode — Kimi K3 | frozen prompt from PROMPT.md verbatim |
 | OpenCode — Ox Alpha | frozen prompt from PROMPT.md verbatim |
