@@ -36,6 +36,14 @@ Higher-quality video: [demo.mp4](runs/claude-code-fable-5/docs/demo.mp4) · Sour
 
 Higher-quality video: [demo.mp4](runs/claude-code-opus-5/docs/demo.mp4) · Source: [`runs/claude-code-opus-5/`](runs/claude-code-opus-5/)
 
+### Claude Code — Opus 5.5
+
+Completed 2026-09-24 in a dedicated Claude Code subagent running Opus 5.5 (`claude-opus-5-5`), started with a fresh context and the frozen [PROMPT.md](PROMPT.md) task verbatim in an empty Git repository. **23/23 tests passed, production build passed, zero corrective interventions**, in about 21 minutes. Orchestrator browser checks of the production build with seeds 1337 and 42 confirmed rain starting on load, streams and waterfalls running off a central massif into lakes, a slowly orbiting camera, a sky-gradient background with matching fog, and no controls or console messages. Visible weaknesses: streams end in a hard straight edge at the map border, and the rock flanks are very spiky. The evaluator was an Opus 5.5 session, the same model as the builder — see [INTERVENTIONS.md](INTERVENTIONS.md).
+
+![Claude Code Opus 5.5 water simulation demo](runs/claude-code-opus-5-5/docs/demo.gif)
+
+Higher-quality video: [demo.mp4](runs/claude-code-opus-5-5/docs/demo.mp4) · Source: [`runs/claude-code-opus-5-5/`](runs/claude-code-opus-5-5/)
+
 ### Claude Code — Sonnet 5
 
 ![Claude Code Sonnet 5 water simulation demo](runs/claude-code-sonnet-5/docs/demo.gif)
@@ -143,6 +151,7 @@ The first six runs in `runs/` are a **pilot round, not a protocol-conformant com
 | Claude Code — Fable 5 | A1 in the initial prompt; A2 arrived near the end of the run, A3 only after completion |
 | Claude Code — Sonnet 5 | A1–A3 in the initial prompt |
 | Claude Code — Opus 5 | A1–A3 in the initial prompt |
+| Claude Code — Opus 5.5 | frozen prompt from PROMPT.md verbatim |
 | Claude Code — Haiku 4.5 | A1–A3 in the initial prompt |
 | Codex CLI — GPT-5.6-sol | final prompt |
 | Codex — GPT-6-astra (high) | frozen prompt from PROMPT.md verbatim |
