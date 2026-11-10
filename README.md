@@ -44,6 +44,16 @@ Completed 2026-09-24 in a dedicated Claude Code subagent running Opus 5.5 (`clau
 
 Higher-quality video: [demo.mp4](runs/claude-code-opus-5-5/docs/demo.mp4) · Source: [`runs/claude-code-opus-5-5/`](runs/claude-code-opus-5-5/)
 
+### Claude Code — Fable 5.2
+
+Completed 2026-11-10 in a dedicated Claude Code subagent running Fable 5.2 (`claude-fable-5-2`), started with a fresh context and the frozen [PROMPT.md](PROMPT.md) task verbatim in an empty Git repository. **25/25 tests passed, production build passed, zero corrective interventions**, in about 23 minutes. Orchestrator browser checks of the production build with seeds 1337 and 42 confirmed rain starting on load under a drifting cloud, springs feeding streams that run down a mountainous island into lakes and on into the surrounding sea, a slowly orbiting camera, a sky-gradient background with matching fog, and no controls. Visible weaknesses: the first ~30 s show only little water, streams on smooth slopes are broad sheets rather than narrow channels, and the rain cloud is a toy-like cluster of spheres. The evaluator was a Fable 5.2 session, the same model as the builder, and the browser checks used a separate headless Chrome instead of the chrome-devtools MCP server — see [INTERVENTIONS.md](INTERVENTIONS.md).
+
+![Claude Code Fable 5.2 water simulation demo](runs/claude-code-fable-5-2/docs/demo.gif)
+
+Higher-quality video: [demo.mp4](runs/claude-code-fable-5-2/docs/demo.mp4) · Source: [`runs/claude-code-fable-5-2/`](runs/claude-code-fable-5-2/)
+
+X showcase video with ElevenLabs background music and model label: [water-fable-5-2-x.mp4](runs/claude-code-fable-5-2/docs/water-fable-5-2-x.mp4) (30 s, 1080p) · [Music and production notes](runs/claude-code-fable-5-2/docs/VIDEO.md)
+
 ### Claude Code — Sonnet 5
 
 ![Claude Code Sonnet 5 water simulation demo](runs/claude-code-sonnet-5/docs/demo.gif)
@@ -152,6 +162,7 @@ The first six runs in `runs/` are a **pilot round, not a protocol-conformant com
 | Claude Code — Sonnet 5 | A1–A3 in the initial prompt |
 | Claude Code — Opus 5 | A1–A3 in the initial prompt |
 | Claude Code — Opus 5.5 | frozen prompt from PROMPT.md verbatim |
+| Claude Code — Fable 5.2 | frozen prompt from PROMPT.md verbatim |
 | Claude Code — Haiku 4.5 | A1–A3 in the initial prompt |
 | Codex CLI — GPT-5.6-sol | final prompt |
 | Codex — GPT-6-astra (high) | frozen prompt from PROMPT.md verbatim |
